@@ -680,6 +680,11 @@
     <input type="file" id="audioInput" accept="audio/*" capture="microphone" style="display:none;">
     <div id="iosHint" class="status" style="display:none;">Mobile Geräte erkannt: Tippe auf das Mikrofon-Symbol, um die Aufnahme zu starten oder eine Audiodatei auszuwählen.</div>
 </div>
+            
+            <!-- NEU: NFC-Button (nur sichtbar, wenn Web NFC API unterstützt wird) -->
+            <div style="margin-top:15px; display:flex; justify-content:center;">
+                <button class="btn-secondary" id="nfcBtn" style="display:none;">NFC-Tag lesen 📲</button>
+            </div>
 
             <div class="status" id="status" role="status" aria-live="polite">Bereit zur Aufnahme</div>
         </div>
@@ -841,6 +846,9 @@
             initMediaRecorderFallback();
             initIOSFallback(); // Behält das Audio-Upload-Handling
             
+            // NEU: NFC Button nur zeigen, wenn API da ist
+            updateNFCButton();
+
             // NEU: API Setup beim Start verbergen/zeigen
             checkAndSetApiSetupState();
         });
@@ -946,10 +954,98 @@
             // Audio Input Listener muss hier bleiben, da er Fallback für Mobile ist
             const audioInput = document.getElementById('audioInput');
             audioInput.addEventListener('change', handleAudioFileSelection);
+            
+            // NEU: NFC Listener
+            const nfcBtn = document.getElementById('nfcBtn');
+            if (nfcBtn) nfcBtn.addEventListener('click', readNFC);
         }
 
         // Dummy-Funktion für SpeechRecognition (wird nicht mehr genutzt, aber zur Sicherheit behalten)
         function initSpeechRecognition() {} 
+        
+        // NEU: NFC Button Logik (Anzeige)
+        function updateNFCButton() {
+            const nfcBtn = document.getElementById('nfcBtn');
+            // Web NFC ist primär auf Android/Chrome verfügbar und sollte auf iOS/Safari ausgeblendet werden
+            if (nfcBtn && ('NDEFReader' in window)) {
+                nfcBtn.style.display = 'inline-flex';
+            } else if (nfcBtn) {
+                nfcBtn.style.display = 'none';
+            }
+        }
+        
+        // NEU: NFC Lese Logik
+        async function readNFC() {
+            if (!('NDEFReader' in window)) {
+                showError('NFC-Lesen wird von diesem Gerät/Browser nicht unterstützt (Web NFC API fehlt).');
+                return;
+            }
+            
+            resetForm();
+            updateRecordButton('NFC: Warte auf Tag-Scan...', 'processing');
+            
+            try {
+                const ndef = new NDEFReader();
+                
+                // Wir müssen scan() aufrufen, um das Reading-Ereignis zu hören.
+                // Es wird kein Promise zurückgegeben, das auf das Tag wartet.
+                await ndef.scan();
+                
+                // Listener für den Lese-Fehler
+                ndef.onreadingerror = (e) => {
+                    showError('NFC Lese-Fehler: Tag ungültig oder entfernt.');
+                    try { if(window.__memotag?.diag) __memotag.diag.diagError('NFC Lese-Fehler'); } catch(_) {}
+                    updateRecordButton('Bereit zur Aufnahme');
+                };
+
+                // Listener für erfolgreiches Lesen
+                ndef.onreading = (e) => {
+                    // NFC-Reader stoppen, um Mehrfachlesungen zu vermeiden
+                    try { ndef.cancelScan(); } catch (_) {}
+                    
+                    const record = e.message.records.find(r => r.recordType === 'text');
+                    
+                    if (record) {
+                        const decoder = new TextDecoder(record.encoding);
+                        const text = decoder.decode(record.data);
+                        processNFCReadout(text);
+                    } else {
+                        showError('NFC-Tag enthält keinen lesbaren Text-Eintrag (NDEF-Text-Record fehlt).');
+                        updateRecordButton('Bereit zur Aufnahme');
+                    }
+                };
+                
+                // Setze einen Timeout, falls der Nutzer den Vorgang nicht abschließt
+                setTimeout(() => {
+                    if (document.getElementById('status').textContent.includes('Warte auf Tag-Scan')) {
+                        showError('NFC-Scan-Timeout: Tag nicht innerhalb von 20 Sekunden erkannt.');
+                        updateRecordButton('Bereit zur Aufnahme');
+                        try { ndef.cancelScan(); } catch (_) {}
+                    }
+                }, 20000); 
+
+            } catch (error) {
+                const errMsg = error.message.includes('permission') 
+                    ? 'NFC-Zugriff verweigert (Bitte Browser-Berechtigungen prüfen).' 
+                    : `NFC-Fehler: ${error.message}`;
+                showError(errMsg);
+                try { if(window.__memotag?.diag) __memotag.diag.diagError(`NFC Scan Fehler: ${error.message}`); } catch(_) {}
+                updateRecordButton('Bereit zur Aufnahme');
+            }
+        }
+        
+        // NEU: Verarbeitet den gelesenen Text
+        async function processNFCReadout(text) {
+             currentTranscript = text;
+             const t = document.getElementById('transcript');
+             if (t) t.value = currentTranscript;
+             const ts = document.getElementById('transcriptSection');
+             if (ts) ts.classList.add('show');
+             
+             document.getElementById('status').textContent = 'NFC-Inhalt erfasst. Erstelle Zusammenfassung...';
+             await summarize(currentTranscript);
+        }
+
 
         // NEU: Zentrale Umschaltfunktion für die Aufnahme
         function toggleRecording() {
@@ -1177,7 +1273,7 @@
                 }
             }
 
-            if (statusText.includes('Warte auf KI') || statusText.includes('Erstelle Zusammenfassung') || statusText.includes('Verarbeite')) {
+            if (statusText.includes('Warte auf KI') || statusText.includes('Erstelle Zusammenfassung') || statusText.includes('Verarbeite') || statusText.includes('NFC')) {
                  if (status) status.classList.add('processing');
                  if (btn) btn.disabled = true;
 
