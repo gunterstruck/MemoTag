@@ -710,14 +710,14 @@
 <body>
     <div class="container">
         <!-- NEU: Header-Div erhält die Klasse 'expanded' beim Laden, wenn kein API-Schlüssel hinterlegt ist -->
-        <div class="header" id="header">
+        <div class="header collapsed" id="header"> <!-- HIER IST DIE WICHTIGE ÄNDERUNG: collapsed ist jetzt standardmäßig gesetzt -->
             <!-- NEU: Klickbares H1 für Toggle -->
             <h1 id="headerTitle">
                 Sprach-Tagebuch Pro
                 <span class="settings-icon" id="settingsIcon">⚙️</span>
             </h1>
             
-            <div class="api-setup" id="apiSetup">
+            <div class="api-setup collapsed" id="apiSetup"> <!-- HIER IST DIE WICHTIGE ÄNDERUNG: collapsed ist standardmäßig gesetzt -->
                 <div class="input-group">
                     <label for="apiProvider">KI-Anbieter:</label>
                     <select id="apiProvider">
@@ -899,7 +899,7 @@
         let editingEntryId = null;
         let activeTagFilter = null;
         let confirmCallback = null;
-        let isApiSetupExpanded = false; // NEU: Standardmäßig auf FALSE gesetzt!
+        let isApiSetupExpanded = false; // Standardmäßig auf FALSE gesetzt!
 
         const DIARY_KEY = 'diary_entries_v2';
 
@@ -947,9 +947,11 @@
             if (isApiSetupExpanded) {
                 setupEl.classList.remove('collapsed');
                 headerEl.classList.add('expanded');
+                headerEl.classList.remove('collapsed'); // Klasse entfernen, falls sie noch da ist
             } else {
                 setupEl.classList.add('collapsed');
                 headerEl.classList.remove('expanded');
+                headerEl.classList.add('collapsed'); // Klasse hinzufügen
             }
         }
         
@@ -961,14 +963,17 @@
             
             // Logik: Nur aufklappen, wenn KEIN Schlüssel vorhanden ist
             if (apiKey && apiKey.length > 0) {
-                // Schlüssel vorhanden -> geschlossen starten
+                // Schlüssel vorhanden -> Zustand bleibt geschlossen (durch HTML-Klasse)
                 isApiSetupExpanded = false; 
+                // Klassen explizit setzen (beim Start: collapsed)
                 setupEl.classList.add('collapsed');
-                headerEl.classList.remove('expanded');
+                headerEl.classList.add('collapsed'); // Füge collapsed zur Header-Box hinzu
+                headerEl.classList.remove('expanded'); 
             } else {
-                // KEIN Schlüssel vorhanden -> geöffnet starten
+                // KEIN Schlüssel vorhanden -> geöffnet starten (Klasse entfernen)
                 isApiSetupExpanded = true; 
                 setupEl.classList.remove('collapsed');
+                headerEl.classList.remove('collapsed'); // Entferne collapsed von Header-Box
                 headerEl.classList.add('expanded');
             }
         }
