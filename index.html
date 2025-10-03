@@ -220,6 +220,40 @@
             padding-top: 15px;
             border-top: 2px solid #F3F4F6;
         }
+        
+        /* Neuer Stil für Tag-Vorschläge */
+        .available-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+            margin-bottom: 15px;
+            padding: 10px;
+            background: #F9FAFB;
+            border-radius: 8px;
+        }
+        
+        .tag-suggestion {
+            background: #E0E7FF;
+            color: #4F46E5;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.2s;
+        }
+        
+        .tag-suggestion:hover {
+            background: #C7D2FE;
+        }
+        
+        .tag-suggestion.active {
+            background: #4F46E5;
+            color: white;
+            border-color: #4F46E5;
+        }
+
 
         .tags-input-group {
             display: flex;
@@ -614,6 +648,11 @@
             <textarea id="summary" aria-label="Zusammenfassung bearbeiten"></textarea>
             
             <div class="tags-section">
+                <label>Verfügbare Tags:</label>
+                <div class="available-tags" id="availableTags">
+                    <!-- Hier werden die Tags per JavaScript eingefügt -->
+                </div>
+
                 <label>Tags hinzufügen:</label>
                 <div class="tags-input-group">
                     <input type="text" id="newTag" placeholder="z.B. Arbeit, Einkauf, Idee...">
@@ -660,6 +699,7 @@
         </div>
     </div>
 
+    <!-- Edit Modal -->
     <div class="modal" id="editModal" role="dialog" aria-labelledby="editModalTitle">
         <div class="modal-content">
             <div class="modal-header">
@@ -668,6 +708,10 @@
             </div>
             <textarea id="editText" aria-label="Text bearbeiten"></textarea>
             <div class="tags-section">
+                <label>Verfügbare Tags:</label>
+                <div class="available-tags" id="editAvailableTags">
+                    <!-- Hier werden die Tags per JavaScript eingefügt -->
+                </div>
                 <label>Tags:</label>
                 <div class="tags-input-group">
                     <input type="text" id="editNewTag" placeholder="Neuer Tag...">
@@ -684,6 +728,7 @@
         </div>
     </div>
 
+    <!-- Batch Summary Modal -->
     <div class="modal" id="batchSummaryModal" role="dialog" aria-labelledby="batchSummaryTitle">
         <div class="modal-content">
             <div class="modal-header">
@@ -701,6 +746,7 @@
         </div>
     </div>
     
+    <!-- Confirmation Modal -->
     <div class="modal" id="confirmModal" role="dialog" aria-labelledby="confirmTitle">
         <div class="modal-content">
             <div class="modal-header">
@@ -734,6 +780,8 @@
             loadEntries();
             initSpeechRecognition();
             setupEventListeners();
+            // Erster Aufruf, um Tags beim Start zu aktualisieren
+            updateAvailableTags(); 
         });
 
         function getEntries() {
@@ -746,6 +794,7 @@
         function saveEntries(entries) {
             localStorage.setItem(DIARY_KEY, JSON.stringify(entries));
             loadEntries();
+            updateAvailableTags(); // Tags nach dem Speichern aktualisieren
         }
 
         function setupEventListeners() {
@@ -997,12 +1046,60 @@
                 wrap.appendChild(btn);
                 container.appendChild(wrap);
             });
+            updateAvailableTags();
         }
 
         function removeCurrentTag(tag) {
             currentTags = currentTags.filter(t => t !== tag);
             updateCurrentTags();
         }
+        
+        // NEUE FUNKTION: Tags sammeln und anzeigen
+        function updateAvailableTags() {
+            const allEntries = getEntries();
+            const allTags = new Set();
+            allEntries.forEach(entry => {
+                if (entry.tags) entry.tags.forEach(tag => allTags.add(tag));
+            });
+
+            // Tags für den Haupt-Tag-Bereich (Neue Notiz)
+            const container = document.getElementById('availableTags');
+            renderTagSuggestions(container, allTags, tag => {
+                if (!currentTags.includes(tag)) {
+                    currentTags.push(tag);
+                } else {
+                    currentTags = currentTags.filter(t => t !== tag);
+                }
+                updateCurrentTags();
+            }, currentTags);
+            
+            // Tags für den Edit-Modal-Bereich
+            const editContainer = document.getElementById('editAvailableTags');
+            renderTagSuggestions(editContainer, allTags, tag => {
+                if (!currentTags.includes(tag)) {
+                    currentTags.push(tag);
+                } else {
+                    currentTags = currentTags.filter(t => t !== tag);
+                }
+                updateEditTags();
+            }, currentTags);
+
+            // Tags für den Filter-Bereich
+            updateTagFilter(allEntries);
+        }
+
+        // Hilfsfunktion zum Rendern der klickbaren Tag-Vorschläge
+        function renderTagSuggestions(container, tags, clickHandler, activeTags) {
+            container.innerHTML = '';
+            Array.from(tags).sort().forEach(tag => {
+                const tagEl = document.createElement('div');
+                tagEl.className = `tag-suggestion ${activeTags.includes(tag) ? 'active' : ''}`;
+                tagEl.textContent = tag;
+                tagEl.addEventListener('click', () => clickHandler(tag));
+                container.appendChild(tagEl);
+            });
+        }
+
 
         function addEditTag() {
             const tagInput = document.getElementById('editNewTag');
@@ -1031,6 +1128,7 @@
                 wrap.appendChild(btn);
                 container.appendChild(wrap);
             });
+            updateAvailableTags(); // Tags im Modal nach dem Editieren aktualisieren
         }
 
         function removeEditTag(tag) {
@@ -1177,7 +1275,7 @@
             }
 
             renderEntries(entries);
-            updateTagFilter(getEntries());
+            // updateTagFilter wird in updateAvailableTags aufgerufen.
         }
 
         function renderEntries(entries) {
@@ -1380,7 +1478,6 @@
             document.getElementById('batchSummaryText').value = '';
             document.getElementById('batchSummaryText').style.display = 'none';
             document.getElementById('batchSummaryActions').style.display = 'none';
-            document.getElementById('batchSummarySuccess').classList.remove('show');
             document.getElementById('batchSummaryLoading').classList.add('show');
         }
 
@@ -1560,6 +1657,115 @@
         }
     </script>
 
+    <!-- KI API Logik -->
+    <script>
+        // Funktion zum Extrahieren der KI-Antwort basierend auf dem Anbieter
+        function handleAPIResponse(provider, data) {
+            if (provider === 'anthropic') {
+                // Anthropic (Claude) Antwortstruktur
+                const textBlock = data.content?.find(block => block.type === 'text');
+                return textBlock?.text || 'Fehler beim Parsen der Anthropic-Antwort.';
+            } else if (provider === 'openai') {
+                // OpenAI (GPT) Antwortstruktur
+                return data.choices?.[0]?.message?.content || 'Fehler beim Parsen der OpenAI-Antwort.';
+            } else if (provider === 'gemini') {
+                // Google (Gemini) Antwortstruktur
+                return data.candidates?.[0]?.content?.parts?.[0]?.text || 'Fehler beim Parsen der Gemini-Antwort.';
+            }
+            return 'Unbekannter KI-Anbieter.';
+        }
+
+        // Hauptfunktion für den KI-API-Aufruf
+        async function callLLMAPI(userPrompt, apiKey, provider, retryCount = 0) {
+            let url = '';
+            let headers = {};
+            let body = {};
+            let model = '';
+            let systemInstruction = 'Du bist ein freundlicher, prägnanter Assistent, der Sprachnotizen zusammenfasst und umformuliert. Deine Antwort soll nur die gewünschte Ausgabe enthalten, ohne einleitenden Text wie "Hier ist die Zusammenfassung". Antworte auf Deutsch.';
+
+            // API Konfiguration basierend auf Anbieter
+            if (provider === 'anthropic') {
+                url = 'https://api.anthropic.com/v1/messages';
+                model = 'claude-3-haiku-20240307';
+                headers = {
+                    'Content-Type': 'application/json',
+                    'x-api-key': apiKey,
+                    'anthropic-version': '2023-06-01'
+                };
+                body = {
+                    model: model,
+                    max_tokens: 2000,
+                    system: systemInstruction,
+                    messages: [
+                        { role: 'user', content: userPrompt }
+                    ]
+                };
+            } else if (provider === 'openai') {
+                url = 'https://api.openai.com/v1/chat/completions';
+                model = 'gpt-3.5-turbo';
+                headers = {
+                    'Content-Type': 'application/json',
+                    'Authorization': `Bearer ${apiKey}`
+                };
+                body = {
+                    model: model,
+                    messages: [
+                        { role: 'system', content: systemInstruction },
+                        { role: 'user', content: userPrompt }
+                    ],
+                    max_tokens: 2000
+                };
+            } else if (provider === 'gemini') {
+                // Gemini verwendet den Canvas-Proxy, daher kein API-Key im Header, sondern in der URL
+                url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash-preview-05-20:generateContent?key=${apiKey}`;
+                headers = {
+                    'Content-Type': 'application/json'
+                };
+                // Korrigierte Struktur: generationConfig statt config und maxOutputTokens direkt darin
+                body = {
+                    contents: [{ parts: [{ text: userPrompt }] }],
+                    systemInstruction: { parts: [{ text: systemInstruction }] },
+                    generationConfig: { maxOutputTokens: 2000 }
+                };
+            } else {
+                throw new Error('Unbekannter KI-Anbieter ausgewählt.');
+            }
+
+            try {
+                const response = await fetch(url, {
+                    method: 'POST',
+                    headers: headers,
+                    body: JSON.stringify(body)
+                });
+
+                const data = await response.json();
+
+                if (!response.ok) {
+                    const errorMsg = data.error?.message || data.error?.type || 'Unbekannter Fehler';
+                    throw new Error(`API-Fehler (${response.status}): ${errorMsg}`);
+                }
+
+                // Fehlerbehandlung für unvollständige Antworten
+                const resultText = handleAPIResponse(provider, data);
+                if (resultText.startsWith('Fehler beim Parsen')) {
+                     throw new Error(resultText);
+                }
+                
+                return resultText;
+
+            } catch (error) {
+                // Exponential Backoff für Netzwerkfehler oder Timeout
+                if (retryCount < 3 && (error.message.includes('Failed to fetch') || error.message.includes('Timeout'))) {
+                    const delay = Math.pow(2, retryCount) * 1000;
+                    console.warn(`API-Aufruf fehlgeschlagen. Versuche es in ${delay}ms erneut...`);
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                    return callLLMAPI(userPrompt, apiKey, provider, retryCount + 1);
+                }
+                throw error;
+            }
+        }
+    </script>
+    
 <section class="diag-card" id="diagnostics">
   <h3 style="margin-top:0">Diagnose</h3>
   <div class="diag-grid">
