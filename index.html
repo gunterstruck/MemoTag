@@ -552,6 +552,7 @@
   #diag-log { max-height: 140px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; background:#fafafa; border:1px solid #eee; border-radius:8px; padding:8px; }
   #diag-log .line { padding:2px 0; border-bottom:1px dashed #eee;}
   #diag-last-error { color:#b50000; font-weight:600; }
+  #diag-api-status { padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; background:#f3f4f6; color:#6b7280; } /* Default status style for API */
 </style>
 
 </head>
@@ -727,6 +728,12 @@
             loadEntries();
             initSpeechRecognition();
             setupEventListeners();
+            // Initial check if API Key is present on load
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            if (apiKey) {
+                checkAPIKey(apiKey, provider);
+            }
         });
 
         function getEntries() {
@@ -742,8 +749,24 @@
         }
 
         function setupEventListeners() {
-            document.getElementById('apiKey').addEventListener('change', saveAPIKey);
-            document.getElementById('apiProvider').addEventListener('change', saveAPIKey);
+            document.getElementById('apiKey').addEventListener('input', () => {
+                saveAPIKey();
+                const apiKey = document.getElementById('apiKey').value.trim();
+                const provider = document.getElementById('apiProvider').value;
+                if (apiKey.length > 5) { // Check only if key is somewhat long
+                    checkAPIKey(apiKey, provider);
+                } else {
+                    updateAPIDiagStatus('Bitte API-Schlüssel eingeben', 'state-warn');
+                }
+            });
+            document.getElementById('apiProvider').addEventListener('change', () => {
+                saveAPIKey();
+                const apiKey = document.getElementById('apiKey').value.trim();
+                const provider = document.getElementById('apiProvider').value;
+                if (apiKey) {
+                    checkAPIKey(apiKey, provider);
+                }
+            });
             document.getElementById('recordBtn').addEventListener('click', toggleRecording);
             document.getElementById('summarizeBtn').addEventListener('click', summarize);
             document.getElementById('cancelBtn').addEventListener('click', cancelTranscript);
@@ -796,6 +819,132 @@
             document.getElementById('confirmNoBtn').addEventListener('click', closeConfirmModal);
             document.getElementById('closeConfirmModal').addEventListener('click', closeConfirmModal);
         }
+        
+        // **********************************************
+        // NEU: API Key Prüfung Logik
+        // **********************************************
+        
+        function updateAPIDiagStatus(text, cls) {
+            const el = document.getElementById('diag-api-status');
+            if (!el) return;
+            el.textContent = text;
+            el.className = `state-badge ${cls}`;
+            diagLog(`API-Status: ${text}`);
+        }
+        
+        async function checkAPIKey(apiKey, provider) {
+            if (!apiKey) {
+                updateAPIDiagStatus('Kein Schlüssel', 'state-warn');
+                return;
+            }
+            
+            updateAPIDiagStatus('Prüfe...', 'state-warn');
+            
+            // Minimaler Test-Prompt, um nur die API-Verbindung zu prüfen
+            const testPrompt = "Ping";
+            
+            try {
+                // Verwenden Sie eine vereinfachte Version von callLLMAPI, die nur das Ergebnis liefert
+                const url = getTestAPIUrl(apiKey, provider);
+                const headers = getTestAPIHeaders(apiKey, provider);
+                const body = getTestAPIBody(testPrompt, provider);
+
+                const response = await fetchWithRetry(url, { method: 'POST', headers, body });
+
+                if (!response.ok) {
+                    throw new Error(`HTTP ${response.status}`);
+                }
+                
+                // Erfolg: Mindestens eine gültige Antwort kam zurück (200 OK)
+                updateAPIDiagStatus('Schlüssel gültig', 'state-ok');
+            } catch (error) {
+                // Fehler: Ungültiger Schlüssel, Ratenlimit, etc.
+                let errorMessage = 'Fehler beim Prüfen';
+                if (error.message.includes('401')) {
+                    errorMessage = 'Ungültiger Schlüssel (401)';
+                } else if (error.message.includes('403')) {
+                    errorMessage = 'Zugriff verweigert (403)';
+                } else if (error.message.includes('429')) {
+                    errorMessage = 'Ratenlimit (429)';
+                } else if (error.message.includes('50')) {
+                    errorMessage = 'Serverfehler';
+                } else {
+                    errorMessage += `: ${error.message}`;
+                }
+                updateAPIDiagStatus(errorMessage, 'state-err');
+            }
+        }
+        
+        function getTestAPIUrl(apiKey, provider) {
+            if (provider === 'anthropic') return 'https://api.anthropic.com/v1/messages';
+            if (provider === 'openai') return 'https://api.openai.com/v1/chat/completions';
+            if (provider === 'gemini') return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
+            throw new Error("Unbekannter KI-Anbieter.");
+        }
+
+        function getTestAPIHeaders(apiKey, provider) {
+            const headers = { 'Content-Type': 'application/json' };
+            if (provider === 'anthropic') {
+                headers['x-api-key'] = apiKey;
+                headers['anthropic-version'] = '2023-06-01';
+                headers['anthropic-dangerous-direct-browser-access'] = 'true';
+            } else if (provider === 'openai') {
+                headers['Authorization'] = `Bearer ${apiKey}`;
+            }
+            return headers;
+        }
+
+        function getTestAPIBody(prompt, provider) {
+            if (provider === 'anthropic') {
+                return JSON.stringify({
+                    model: 'claude-3-5-sonnet-20241022',
+                    max_tokens: 10, // Max tokens auf Minimum setzen
+                    messages: [{ role: 'user', content: prompt }]
+                });
+            } else if (provider === 'openai') {
+                return JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 10 // Max tokens auf Minimum setzen
+                });
+            } else if (provider === 'gemini') {
+                return JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }],
+                    config: { maxOutputTokens: 10 } // Max tokens auf Minimum setzen
+                });
+            }
+            return null;
+        }
+
+        // Hilfsfunktion für Fetch mit Exponential Backoff (für Stabilität)
+        async function fetchWithRetry(url, options, maxRetries = 3) {
+            for (let i = 0; i < maxRetries; i++) {
+                try {
+                    const response = await fetch(url, options);
+                    if (response.status !== 429 && response.status < 500) {
+                        return response; // Success or non-retryable client error
+                    }
+                    if (i === maxRetries - 1) {
+                        return response; // Last try, return response even if 429/5xx
+                    }
+                    // Wait for 2^i seconds
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                } catch (error) {
+                    if (i === maxRetries - 1) {
+                        throw error; // Last try, throw network error
+                    }
+                    // Wait for 2^i seconds
+                    const delay = Math.pow(2, i) * 1000;
+                    await new Promise(resolve => setTimeout(resolve, delay));
+                }
+            }
+        }
+        
+        // **********************************************
+        // ENDE: API Key Prüfung Logik
+        // **********************************************
+
 
         function initSpeechRecognition() {
             const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -824,6 +973,7 @@
 
             recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
+                diagError(event.error); // Log to diagnostic
                 showError('Fehler bei der Spracherkennung: ' + event.error);
                 stopRecording();
             };
@@ -843,7 +993,14 @@
             document.getElementById('transcriptSection').style.display = 'none';
             document.getElementById('summarySection').style.display = 'none';
             
-            recognition.start();
+            try {
+                recognition.start();
+            } catch (e) {
+                diagError('Recognition Start Error: ' + e.message);
+                showError('Aufnahme konnte nicht gestartet werden. Prüfen Sie die Mikrofon-Berechtigung.');
+                return;
+            }
+
             isRecording = true;
             document.getElementById('recordBtn').classList.add('recording');
             document.getElementById('recordBtn').textContent = '⏹️';
@@ -863,9 +1020,12 @@
             document.getElementById('recordBtn').setAttribute('aria-label', 'Aufnahme starten');
             document.getElementById('status').textContent = 'Aufnahme beendet';
             
+            // NEU: Zeige Transkription, sobald Aufnahme stoppt und Text da ist
             if (currentTranscript.trim()) {
                 document.getElementById('transcriptSection').style.display = 'block';
                 document.getElementById('transcript').value = currentTranscript.trim();
+            } else {
+                document.getElementById('transcriptSection').style.display = 'none';
             }
         }
 
@@ -949,7 +1109,7 @@
                     max_tokens: 500
                 });
             } else if (provider === 'gemini') {
-                url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+                url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
                 body = JSON.stringify({
                     contents: [{ parts: [{ text: prompt }] }]
                 });
@@ -957,7 +1117,7 @@
                 throw new Error("Unbekannter KI-Anbieter.");
             }
 
-            const response = await fetch(url, { method: 'POST', headers, body });
+            const response = await fetchWithRetry(url, { method: 'POST', headers, body });
 
             if (!response.ok) {
                 const errorData = await response.json().catch(() => ({}));
@@ -1599,6 +1759,9 @@
     <div>Zustand</div>
     <div><span id="diag-state" class="state-badge state-warn">bereit</span></div>
 
+    <div>API-Schlüssel</div>
+    <div><span id="diag-api-status" class="state-badge state-warn">Bitte API-Schlüssel eingeben</span></div> <!-- NEU: API Statusanzeige -->
+
     <div>Mikrofon-Pegel</div>
     <div class="level-wrap"><div id="diag-level" class="level-bar anim"></div></div>
 
@@ -1607,7 +1770,6 @@
 
     <div>Ereignis-Log</div>
     <div id="diag-log" aria-live="polite"></div>
-<div style="grid-column:1 / span 2; display:flex; gap:8px; margin-top:8px;"><button id="diagStart" type="button">Diagnose starten</button><button id="diagStop" type="button">Diagnose stoppen</button></div>
   </div>
 </section>
 
@@ -1739,51 +1901,6 @@
 
     window.__memotag.diag = { diagSetState, diagLog, diagError, startMicMeter, stopMicMeter };
   })();
-</script>
-
-
-<script id="diag-boost">
-(function(){
-  function onReady(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
-
-  onReady(function(){
-    // Buttons
-    const btnStart = document.getElementById('diagStart');
-    const btnStop = document.getElementById('diagStop');
-    if(btnStart) btnStart.addEventListener('click', ()=> { window.__memotag?.diag?.startMicMeter(); window.__memotag?.diag?.diagLog('Diagnose manuell gestartet'); });
-    if(btnStop) btnStop.addEventListener('click', ()=> { window.__memotag?.diag?.stopMicMeter(); window.__memotag?.diag?.diagLog('Diagnose manuell gestoppt'); });
-
-    // Record button logging even if functions weren't replaced
-    const rbtn = document.getElementById('recordBtn');
-    if(rbtn){
-      rbtn.addEventListener('click', ()=>{
-        window.__memotag?.diag?.diagLog('Klick auf Aufnahme-Button (UI)');
-      }, {capture:true});
-    }
-
-    // Try to attach handlers to an existing recognition instance
-    let tries = 0;
-    const attachInterval = setInterval(()=>{
-      tries++;
-      const r = window.recognition;
-      if(r && !r.__diagAttached){
-        try{
-          const d = window.__memotag?.diag;
-          if(d){
-            const prevOnResult = r.onresult;
-            r.onstart = (e)=>{ d.diagSetState('läuft','state-ok'); d.diagLog('onstart (später attach)'); };
-            r.onresult = (ev)=>{ d.diagLog('onresult (' + ev.results.length + ' Segmente) [später attach]'); if(prevOnResult) prevOnResult(ev); };
-            r.onerror = (ev)=>{ d.diagError(ev.error || 'Unbekannter Fehler'); };
-            r.onend = ()=>{ d.diagLog('onend [später attach]'); if(window.isRecording){ try{ r.start(); }catch(e){ d.diagLog('Restart Fehler: ' + e.message); } } else { d.diagSetState('beendet','state-warn'); } };
-            r.__diagAttached = true;
-            d.diagLog('Diagnose an bestehende Recognition angehängt.');
-          }
-        }catch(e){ /* ignore */ }
-      }
-      if(tries>20) clearInterval(attachInterval);
-    }, 500);
-  });
-})();
 </script>
 
 </body>
