@@ -899,7 +899,8 @@
         const DIARY_KEY = 'diary_entries_v2';
 
         document.addEventListener('DOMContentLoaded', () => {
-            loadAPIKey(); // <--- Neu positioniert
+            loadAPIKey(); // <--- API Key und Provider werden geladen
+            loadLocationPermission(); // NEU: Standort-Präferenz wird geladen
             loadEntries();
             // initSpeechRecognition(); // Entfernt, da Live-SR wegfällt
             setupEventListeners();
@@ -982,6 +983,8 @@
             
             document.getElementById('saveBtn').addEventListener('click', saveEntry);
             document.getElementById('editCancelBtn').addEventListener('click', resetForm); // Zurücksetzen, nicht nur Abbrechen
+            
+            // NEU: Listener speichert Präferenz beim Ändern
             document.getElementById('locationPermission').addEventListener('change', handleLocationPermission);
             
             document.getElementById('addTagBtn').addEventListener('click', addCurrentTag);
@@ -1387,19 +1390,55 @@
             }
         }
 
+        function saveLocationPermission(isChecked) {
+            localStorage.setItem('location_permission', isChecked ? 'true' : 'false');
+        }
+
+        function loadLocationPermission() {
+            const permissionCheckbox = document.getElementById('locationPermission');
+            const storedValue = localStorage.getItem('location_permission');
+            
+            // Standardmäßig ist es nicht gesetzt (null) oder 'false'
+            if (storedValue === 'true') {
+                permissionCheckbox.checked = true;
+                // Optional: Hier könnte man direkt die Berechtigung anfordern, 
+                // aber der Browser macht das wahrscheinlich automatisch, sobald man die Checkbox anklickt.
+            } else {
+                permissionCheckbox.checked = false;
+            }
+        }
+        
         function handleLocationPermission() {
-            if (document.getElementById('locationPermission').checked) {
+            const permissionCheckbox = document.getElementById('locationPermission');
+            const isChecked = permissionCheckbox.checked;
+
+            // 1. Speichere die Präferenz
+            saveLocationPermission(isChecked);
+
+            // 2. Frage die Berechtigung an, wenn sie aktiviert wurde
+            if (isChecked) {
                 if (navigator.geolocation) {
                     navigator.geolocation.getCurrentPosition(
-                        () => console.log('Location permission granted'),
+                        () => {
+                            console.log('Location permission granted');
+                            // Keine Fehlermeldung, da die Berechtigung erfolgreich ist.
+                        },
                         (error) => {
                             console.error('Location permission denied:', error);
-                            document.getElementById('locationPermission').checked = false;
-                            showError('Standort-Berechtigung wurde verweigert');
+                            // Wenn der Nutzer die Berechtigung verweigert hat, setzen wir die Checkbox zurück
+                            // und zeigen eine Meldung, speichern aber die Präferenz, dass er es wollte.
+                            permissionCheckbox.checked = false;
+                            saveLocationPermission(false);
+                            showError('Standort-Berechtigung wurde verweigert oder ist nicht verfügbar.');
                         }
                     );
+                } else {
+                    showError('Geolocation wird von diesem Browser nicht unterstützt.');
+                    permissionCheckbox.checked = false;
+                    saveLocationPermission(false);
                 }
             }
+            // Wenn es deaktiviert wird, muss nichts weiter passieren, außer der Speicherung
         }
 
         // NEU: Summarize-Funktion nimmt jetzt Transkript als Argument und wird automatisch aufgerufen
