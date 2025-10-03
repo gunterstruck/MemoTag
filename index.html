@@ -26,12 +26,33 @@
             margin: 0 auto;
         }
 
-        .header {
+        /* AKTUELLE ABSCHNITTE MIT ANPASSUNG DES ABSTANDES */
+        .header,
+        .record-section,
+        /* .transcript-section, .summary-section sind jetzt unten in ihrer eigenen Regel */
+        .entries-section {
             background: white;
             border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            /* NEU: Einheitlicher, reduzierter Abstand von 12px zwischen den Sektionen */
+            margin-bottom: 12px; 
+            padding: 20px; /* Standard-Padding für Header, Einträge, etc. */
+        }
+        
+        /* Spezifisches Padding für Record Section, da sie den großen Button hat */
+        .record-section {
+            padding: 30px;
+            text-align: center;
+        }
+        
+        /* Spezifisches Padding für Header */
+        .header {
+             padding: 20px;
+        }
+        
+        /* Spezifisches Padding für Einträge Section */
+        .entries-section {
+             padding: 20px;
         }
 
         h1 {
@@ -39,7 +60,6 @@
             font-size: 28px;
             margin-bottom: 15px;
             overflow-wrap: break-word;
-            /* NEU: Macht den Titel klickbar, um die Einstellungen umzuschalten */
             cursor: pointer; 
             display: flex;
             align-items: center;
@@ -52,28 +72,27 @@
             transition: transform 0.3s;
         }
 
-        .header.expanded .settings-icon {
+        .header:not(.expanded) .settings-icon {
             transform: rotate(90deg);
         }
 
         .api-setup {
-            background: #F3F4F6;
+            background: #F3FF;
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 15px;
-            /* NEU: Animation für das Ein-/Ausklappen */
             transition: max-height 0.5s ease-out, opacity 0.5s ease-out, padding 0.5s ease-out, margin-bottom 0.5s ease-out;
             overflow: hidden;
-            max-height: 500px; /* Startwert */
+            max-height: 500px; 
             opacity: 1;
         }
 
         .api-setup.collapsed {
-            max-height: 0;
-            opacity: 0;
-            padding-top: 0;
-            padding-bottom: 0;
-            margin-bottom: 0;
+            max-height: 0 !important;
+            opacity: 0 !important;
+            padding-top: 0 !important;
+            padding-bottom: 0 !important;
+            margin-bottom: 0 !important;
         }
 
         .input-group {
@@ -102,15 +121,8 @@
             border-color: #4F46E5;
         }
         
-        .record-section {
-            background: white;
-            border-radius: 20px;
-            padding: 30px;
-            margin-bottom: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            text-align: center;
-        }
-
+        /* ALTE REGELN ENTFERNT UND ZUSAMMENGEFASST OBEN */
+        
         .record-button {
             width: 120px;
             height: 120px;
@@ -156,27 +168,32 @@
         /* Neuer Status für laufende KI-Verarbeitung */
         .processing {
             color: #4F46E5;
-            font-weight: 600;
+            font-weight: 601;
         }
 
 
+        /* NEUE REGEL: Standardmäßig komplett kollabiert, KEIN Margin/Padding */
         .transcript-section, .summary-section {
             background: white;
             border-radius: 20px;
-            padding: 20px;
-            margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
             opacity: 0;
             height: 0;
             overflow: hidden;
-            transition: opacity 0.5s ease-in-out, height 0.5s ease-in-out;
             pointer-events: none;
+            /* NEU: margin und padding im kollabierten Zustand entfernen */
+            margin: 0;          
+            padding: 0;
+            transition: opacity 0.5s ease-in-out, height 0.5s ease-in-out, padding 0.5s ease-in-out, margin-bottom 0.5s ease-in-out;
         }
 
+        /* NEUE REGEL: Im .show-Zustand wieder Margin/Padding/Höhe geben */
         .transcript-section.show, .summary-section.show {
             opacity: 1;
             height: auto;
             pointer-events: all;
+            margin-bottom: 12px; 
+            padding: 20px;
         }
 
         .section-title {
@@ -355,10 +372,7 @@
         }
 
         .entries-section {
-            background: white;
-            border-radius: 20px;
-            padding: 20px;
-            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            /* Das margin-bottom von 12px wird bereits oben im Sammelselektor angewendet */
         }
 
         .entries-header {
@@ -620,7 +634,48 @@
     </style>
 
 <style id="diag-styles">
-  .diag-card { margin: 16px auto; max-width: 900px; background: rgba(255,255,255,0.9); border-radius: 16px; padding: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+  /* Diagnostik Styles (Collapsible) */
+  .diag-card { 
+      margin: 16px auto; 
+      max-width: 900px; 
+      background: rgba(255,255,255,0.9); 
+      border-radius: 16px; 
+      padding: 16px; 
+      box-shadow: 0 6px 24px rgba(0,0,0,0.08); 
+      /* NEU: Auch hier einen kleinen margin-bottom nutzen */
+      margin-bottom: 12px !important; 
+  }
+  .diag-card h3 {
+      cursor: pointer;
+      margin-top: 0;
+      margin-bottom: 0; 
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+  }
+  .diag-card h3 .toggle-icon {
+      font-size: 14px;
+      transition: transform 0.3s;
+      margin-left: 8px;
+      transform: rotate(0deg);
+  }
+  .diag-card.collapsed h3 .toggle-icon {
+      transform: rotate(-90deg);
+  }
+
+  .diag-content {
+      transition: max-height 0.5s ease-in-out, opacity 0.5s ease-in-out, padding-top 0.5s ease-in-out;
+      max-height: 1000px; 
+      overflow: hidden;
+      opacity: 1;
+      padding-top: 16px;
+  }
+  .diag-card.collapsed .diag-content {
+      max-height: 0;
+      opacity: 0;
+      padding-top: 0;
+  }
+    
   .diag-grid { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; align-items: center; }
   .state-badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; }
   .state-ok { background:#e6f7ef; color:#0a7f4f; }
@@ -851,6 +906,9 @@
 
             // NEU: API Setup beim Start verbergen/zeigen
             checkAndSetApiSetupState();
+
+            // NEU: Diagnose beim Start einklappen
+            document.getElementById('diagnostics').classList.add('collapsed');
         });
 
         function getEntries() {
@@ -884,18 +942,27 @@
         // NEU: Prüft beim Laden, ob API-Schlüssel vorhanden und passt den Zustand an
         function checkAndSetApiSetupState() {
             const apiKey = localStorage.getItem('api_key');
+            // NEU: Wenn API Key hinterlegt ist, starten wir collapsed
             if (apiKey && apiKey.trim().length > 0) {
-                isApiSetupExpanded = false;
+                isApiSetupExpanded = false; 
             } else {
-                isApiSetupExpanded = true;
+                isApiSetupExpanded = true; // Start expanded
             }
             toggleApiSetup(); // Führt die initiale Zustandsänderung durch
+        }
+        
+        // NEU: Logik zum Ein-/Ausklappen der Diagnose
+        function toggleDiagnostics() {
+            const diag = document.getElementById('diagnostics');
+            diag.classList.toggle('collapsed');
         }
 
 
         function setupEventListeners() {
             // NEU: Event-Listener für den Header-Titel
             document.getElementById('headerTitle').addEventListener('click', toggleApiSetup);
+            // NEU: Event-Listener für den Diagnose-Header
+            document.getElementById('diagHeader').addEventListener('click', toggleDiagnostics);
             
             document.getElementById('apiKey').addEventListener('change', saveAPIKey);
             document.getElementById('apiProvider').addEventListener('change', saveAPIKey);
@@ -986,12 +1053,6 @@
             
             try {
                 const ndef = new NDEFReader();
-                
-                // Wir verwenden scan() mit einem Promise, um sicherzustellen, dass wir auf eine erfolgreiche 
-                // Initialisierung warten, bevor wir die onreading/onreadingerror-Handler setzen.
-                // NOTE: ndef.scan() gibt KEIN Promise zurück, das auf das Tag wartet, sondern ein Promise, 
-                // das auflöst, sobald der Reader bereit ist. Die eigentliche Lese-Logik muss in onreading.
-                // Die aktuelle Struktur im vorherigen Code war korrekt, wird hier aber robuster gemacht.
                 
                 // Der Scan-Vorgang beginnt hier.
                 await ndef.scan();
@@ -1244,12 +1305,12 @@
         // HILFSFUNKTION: MediaRecorder Fallback Logik (Initialisierung)
         function initMediaRecorderFallback(){
              try { if(window.__memotag?.diag) window.__memotag.diag.diagLog('Init: MediaRecorder Fallback'); } catch(_) {}
-            // Der Haupt-Button-Click-Handler ist jetzt toggleRecording
+            // Der Haupt-Button-Klick-Handler ist jetzt toggleRecording
         }
 
         // HILFSFUNKTION: iOS Fallback Logik (Initialisierung)
         function initIOSFallback() {
-             try { if(window.__memotag?.diag) window.__memotag.diag.diagLog('Init: iOS Fallback (Status-Hinweis)'); } catch(_) {}
+             try { if(window.__memotag?.diag) __memotag.diag.diagLog('Init: iOS Fallback (Status-Hinweis)'); } catch(_) {}
             // Zeige Hinweis für mobile Geräte
             const iosHint = document.getElementById('iosHint');
             if (iosHint) {
@@ -2229,21 +2290,23 @@ navigator.serviceWorker.addEventListener('controllerchange', () => {
         }
     </script>
     
-<section class="diag-card" id="diagnostics">
-  <h3 style="margin-top:0">Diagnose</h3>
-  <div class="diag-grid">
-    <div>Zustand</div>
-    <div><span id="diag-state" class="state-badge state-warn">bereit</span></div>
+<section class="diag-card collapsed" id="diagnostics"> <!-- NEU: 'collapsed' als Standard -->
+  <h3 style="margin-top:0" id="diagHeader">Diagnose <span class="toggle-icon">▼</span></h3> <!-- NEU: ID und Icon -->
+  <div class="diag-content" id="diagContent"> <!-- NEU: Content Wrapper -->
+      <div class="diag-grid">
+        <div>Zustand</div>
+        <div><span id="diag-state" class="state-badge state-warn">bereit</span></div>
 
-    <div>Mikrofon-Pegel</div>
-    <div class="level-wrap"><div id="diag-level" class="level-bar anim"></div></div>
+        <div>Mikrofon-Pegel</div>
+        <div class="level-wrap"><div id="diag-level" class="level-bar anim"></div></div>
 
-    <div>Letzter Fehler</div>
-    <div id="diag-last-error">–</div>
+        <div>Letzter Fehler</div>
+        <div id="diag-last-error">–</div>
 
-    <div>Ereignis-Log</div>
-    <div id="diag-log" aria-live="polite"></div>
-<div style="grid-column:1 / span 2; display:flex; gap:8px; margin-top:8px;"><button id="diagStart" type="button">Diagnose starten</button><button id="diagStop" type="button">Diagnose stoppen</button></div>
+        <div>Ereignis-Log</div>
+        <div id="diag-log" aria-live="polite"></div>
+        <div style="grid-column:1 / span 2; display:flex; gap:8px; margin-top:8px;"><button id="diagStart" type="button">Diagnose starten</button><button id="diagStop" type="button">Diagnose stoppen</button></div>
+      </div>
   </div>
 </section>
 
