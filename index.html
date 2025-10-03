@@ -538,6 +538,22 @@
             }
         }
     </style>
+
+<style id="diag-styles">
+  .diag-card { margin: 16px auto; max-width: 900px; background: rgba(255,255,255,0.9); border-radius: 16px; padding: 16px; box-shadow: 0 6px 24px rgba(0,0,0,0.08); }
+  .diag-grid { display: grid; grid-template-columns: 160px 1fr; gap: 8px 16px; align-items: center; }
+  .state-badge { display:inline-block; padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; }
+  .state-ok { background:#e6f7ef; color:#0a7f4f; }
+  .state-warn { background:#fff4e6; color:#a15a00; }
+  .state-err { background:#ffe8e6; color:#b50000; }
+  .level-wrap { width:100%; height:10px; background:#eee; border-radius:6px; overflow:hidden; }
+  .level-bar { height:100%; width:0%; transition: width .08s linear; }
+  .level-bar.anim { background: linear-gradient(90deg, #a78bfa, #7c3aed); }
+  #diag-log { max-height: 140px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; background:#fafafa; border:1px solid #eee; border-radius:8px; padding:8px; }
+  #diag-log .line { padding:2px 0; border-bottom:1px dashed #eee;}
+  #diag-last-error { color:#b50000; font-weight:600; }
+</style>
+
 </head>
 <body>
     <div class="container">
@@ -1576,114 +1592,153 @@
             });
         }
     </script>
-<script>
-function initSpeechRecognition() {
-  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-  if (!SR) {
-    const btn = document.getElementById('recordBtn');
-    if (btn) btn.disabled = true;
-    showError && showError('Spracherkennung wird in diesem Browser nicht unterstützt.');
-    return;
-  }
-  try { if (window.recognition && window.recognition.abort) window.recognition.abort(); } catch (e) {}
-  const rec = new SR();
-  rec.continuous = true;
-  rec.interimResults = true;
-  rec.lang = 'de-DE';
 
-  rec.onresult = (event) => {
-    let interim = '';
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        window.currentTranscript = (window.currentTranscript || '') + event.results[i][0].transcript + ' ';
-      } else {
-        interim += event.results[i][0].transcript;
+<section class="diag-card" id="diagnostics">
+  <h3 style="margin-top:0">Diagnose</h3>
+  <div class="diag-grid">
+    <div>Zustand</div>
+    <div><span id="diag-state" class="state-badge state-warn">bereit</span></div>
+
+    <div>Mikrofon-Pegel</div>
+    <div class="level-wrap"><div id="diag-level" class="level-bar anim"></div></div>
+
+    <div>Letzter Fehler</div>
+    <div id="diag-last-error">–</div>
+
+    <div>Ereignis-Log</div>
+    <div id="diag-log" aria-live="polite"></div>
+  </div>
+</section>
+
+
+<script id="diag-script">
+  (function(){
+    const $state = () => document.getElementById('diag-state');
+    const $log = () => document.getElementById('diag-log');
+    const $err = () => document.getElementById('diag-last-error');
+    const $lvl = () => document.getElementById('diag-level');
+
+    window.__memotag = window.__memotag || {};
+    let audioCtx, analyser, micStream, rafId;
+    let lowLevelStart = null;
+
+    function ts(){
+      const d = new Date();
+      return d.toLocaleTimeString();
+    }
+
+    window.diagSetState = function(text, cls){
+      const el = $state();
+      if(!el) return;
+      el.textContent = text;
+      el.classList.remove('state-ok','state-warn','state-err');
+      el.classList.add(cls || 'state-warn');
+    }
+
+    window.diagLog = function(msg){
+      const el = $log();
+      if(!el) return;
+      const line = document.createElement('div');
+      line.className = 'line';
+      line.textContent = `[${ts()}] ${msg}`;
+      el.prepend(line);
+      const nodes = el.querySelectorAll('.line');
+      if(nodes.length > 60) el.removeChild(nodes[nodes.length-1]);
+    }
+
+    window.diagError = function(msg){
+      const el = $err();
+      if(el) el.textContent = msg || '–';
+      diagSetState('Fehler', 'state-err');
+      diagLog('ERROR: ' + msg);
+    }
+
+    window.startMicMeter = async function(){
+      try{
+        if(!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia){
+          diagLog('getUserMedia nicht verfügbar');
+          return;
+        }
+        micStream = await navigator.mediaDevices.getUserMedia({audio:true});
+        audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        analyser = audioCtx.createAnalyser();
+        analyser.fftSize = 2048;
+        const source = audioCtx.createMediaStreamSource(micStream);
+        source.connect(analyser);
+        const data = new Uint8Array(analyser.fftSize);
+
+        function tick(){
+          analyser.getByteTimeDomainData(data);
+          let sum = 0;
+          for(let i=0;i<data.length;i++){ const v = (data[i]-128)/128; sum += v*v; }
+          const rms = Math.sqrt(sum/data.length);
+          const pct = Math.min(100, Math.max(0, Math.round(rms*180)));
+          const bar = $lvl();
+          if(bar){ bar.style.width = pct + '%'; }
+          if(pct < 5){
+            if(!lowLevelStart) lowLevelStart = performance.now();
+            else if(performance.now() - lowLevelStart > 3000){
+              diagLog('Hinweis: Sehr niedriger Pegel erkannt (Mikro weit weg? stumm?)');
+              lowLevelStart = null;
+            }
+          } else {
+            lowLevelStart = null;
+          }
+          rafId = requestAnimationFrame(tick);
+        }
+        tick();
+        diagLog('Mic-Meter gestartet');
+      }catch(e){
+        diagError('Mic-Meter Fehler: ' + e.message);
       }
     }
-    const ta = document.getElementById('transcript');
-    if (ta) ta.value = (window.currentTranscript || '') + interim;
-  };
 
-  rec.onerror = (event) => {
-    console.error('Speech recognition error:', event.error);
-    try { stopRecording(); } catch(e) {}
-  };
-
-  rec.onend = () => {
-    if (window.isRecording) {
-      try { rec.start(); } catch (e) { /* ignore */ }
+    window.stopMicMeter = function(){
+      if(rafId) cancelAnimationFrame(rafId);
+      rafId = null;
+      try { if(micStream){ micStream.getTracks().forEach(t=>t.stop()); } } catch(e){}
+      try { if(audioCtx){ audioCtx.close(); } } catch(e){}
+      const bar = $lvl();
+      if(bar){ bar.style.width = '0%'; }
+      diagLog('Mic-Meter gestoppt');
     }
-  };
 
-  window.recognition = rec;
-}
-function startRecording() {
-  window.currentTranscript = '';
-  const transcriptEl = document.getElementById('transcript');
-  if (transcriptEl) transcriptEl.value = '';
-  const ts = document.getElementById('transcriptSection');
-  const ss = document.getElementById('summarySection');
-  if (ts) ts.style.display = 'none';
-  if (ss) ss.style.display = 'none';
-
-  initSpeechRecognition();
-
-  setTimeout(() => {
-    if (!window.recognition) return;
-    try { window.recognition.start(); } catch(e) { console.warn(e); }
-    window.isRecording = true;
-    const btn = document.getElementById('recordBtn');
-    if (btn) {
-      btn.classList.add('recording');
-      btn.textContent = '⏹️';
-      btn.setAttribute('aria-label', 'Aufnahme stoppen');
+    const _origInit = window.initSpeechRecognition;
+    window.initSpeechRecognition = function(){
+      if(typeof _origInit === 'function'){
+        _origInit();
+      }
+      try{
+        if(window.recognition){
+          const r = window.recognition;
+          r.onstart = ()=>{ diagSetState('läuft', 'state-ok'); diagLog('onstart'); };
+          r.onaudiostart = ()=>{ diagLog('onaudiostart'); };
+          r.onsoundstart = ()=>{ diagLog('onsoundstart'); };
+          r.onspeechstart = ()=>{ diagSetState('Sprache erkannt', 'state-ok'); diagLog('onspeechstart'); };
+          r.onspeechend = ()=>{ diagLog('onspeechend'); };
+          r.onsoundend = ()=>{ diagLog('onsoundend'); };
+          r.onaudioend = ()=>{ diagLog('onaudioend'); };
+          const prevOnResult = r.onresult;
+          r.onresult = (ev)=>{ diagLog('onresult (' + ev.results.length + ' Segmente)'); if(prevOnResult) prevOnResult(ev); };
+          r.onerror = (ev)=>{ diagError(ev.error || 'Unbekannter Fehler'); try{ if(window.stopRecording) window.stopRecording(); }catch(e){} };
+          r.onend = ()=>{
+            diagLog('onend');
+            if(window.isRecording){
+              diagSetState('automatischer Neustart...', 'state-warn');
+              try { r.start(); } catch(e) { diagLog('Restart Fehler: ' + e.message); }
+            } else {
+              diagSetState('beendet', 'state-warn');
+            }
+          };
+        }
+      }catch(e){
+        diagError('Init-Hook Fehler: ' + e.message);
+      }
     }
-    const status = document.getElementById('status');
-    if (status) status.textContent = 'Aufnahme läuft...';
 
-    const loc = document.getElementById('locationPermission');
-    if (loc && loc.checked && typeof getCurrentLocation === 'function') getCurrentLocation();
-  }, 50);
-
-  // Auto-timeout as safety net (e.g., 90s)
-  clearTimeout(window.__recTimeout);
-  window.__recTimeout = setTimeout(() => {
-    try { stopRecording(); } catch(e) {}
-  }, 90 * 1000);
-}
-function stopRecording() {
-  clearTimeout(window.__recTimeout);
-  try { if (window.recognition && window.recognition.stop) window.recognition.stop(); } catch(e) {}
-  try { if (window.recognition && window.recognition.abort) window.recognition.abort(); } catch(e) {}
-  window.isRecording = false;
-
-  const btn = document.getElementById('recordBtn');
-  if (btn) {
-    btn.classList.remove('recording');
-    btn.textContent = '🎤';
-    btn.setAttribute('aria-label', 'Aufnahme starten');
-  }
-  const status = document.getElementById('status');
-  if (status) status.textContent = 'Aufnahme beendet';
-
-  const text = (window.currentTranscript || '').trim();
-  if (text) {
-    const ts = document.getElementById('transcriptSection');
-    if (ts) ts.style.display = 'block';
-    const ta = document.getElementById('transcript');
-    if (ta) ta.value = text;
-  }
-}
-function toggleRecording() {
-  const btn = document.getElementById('recordBtn');
-  if (window.isRecording) {
-    stopRecording();
-  } else {
-    // Guard against double clicks
-    if (btn && btn.disabled) return;
-    startRecording();
-  }
-}
+    window.__memotag.diag = { diagSetState, diagLog, diagError, startMicMeter, stopMicMeter };
+  })();
 </script>
+
 </body>
 </html>

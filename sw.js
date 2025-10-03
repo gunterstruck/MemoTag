@@ -1,58 +1,77 @@
-const CACHE_NAME = 'memotag-cache-v3';
-const urlsToCache = [
+const CACHE_NAME = 'sprach-tagebuch-v1';
+const ASSETS_TO_CACHE = [
   './',
   './index.html',
   './manifest.webmanifest',
-  './icon-192.png',
-  './icon-512.png',
+  './sw.js'
 ];
 
-self.addEventListener('install', (event) => {
+// Installation - Cache erstellen
+self.addEventListener('install', event => {
+  console.log('Service Worker installing...');
   event.waitUntil(
-    caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache))
+    caches.open(CACHE_NAME)
+      .then(cache => {
+        console.log('Caching app shell');
+        return cache.addAll(ASSETS_TO_CACHE);
+      })
+      .then(() => self.skipWaiting())
   );
 });
 
-self.addEventListener('activate', (event) => {
+// Aktivierung - Alte Caches löschen
+self.addEventListener('activate', event => {
+  console.log('Service Worker activating...');
   event.waitUntil(
-    caches.keys().then((cacheNames) =>
-      Promise.all(
+    caches.keys().then(cacheNames => {
+      return Promise.all(
         cacheNames
-          .filter((name) => name !== CACHE_NAME)
-          .map((name) => caches.delete(name))
-      )
-    )
+          .filter(name => name !== CACHE_NAME)
+          .map(name => caches.delete(name))
+      );
+    }).then(() => self.clients.claim())
   );
 });
 
-self.addEventListener('fetch', (event) => {
-  const { request } = event;
-
-  // Never cache provider API calls
-  if (
-    request.url.includes('api.openai.com') ||
-    request.url.includes('anthropic.com') ||
-    request.url.includes('generativelanguage.googleapis.com')
-  ) {
+// Fetch - Cache-first Strategie
+self.addEventListener('fetch', event => {
+  // Nur GET-Requests cachen
+  if (event.request.method !== 'GET') return;
+  
+  // API-Calls nicht cachen
+  if (event.request.url.includes('api.anthropic.com') ||
+      event.request.url.includes('api.openai.com') ||
+      event.request.url.includes('generativelanguage.googleapis.com')) {
     return;
   }
 
-  // Navigation fallback: serve cached index.html when offline
-  if (request.mode === 'navigate') {
-    event.respondWith(
-      fetch(request).catch(() =>
-        caches.match('./index.html').then((resp) => resp || Response.error())
-      )
-    );
-    return;
-  }
-
-  // Cache-first for other requests
   event.respondWith(
-    caches.match(request).then(
-      (resp) =>
-        resp ||
-        fetch(request).catch(() => new Response('Offline – keine Verbindung'))
-    )
+    caches.match(event.request)
+      .then(cachedResponse => {
+        if (cachedResponse) {
+          return cachedResponse;
+        }
+        return fetch(event.request).then(response => {
+          // Nur erfolgreiche Responses cachen
+          if (!response || response.status !== 200 || response.type === 'error') {
+            return response;
+          }
+          
+          const responseToCache = response.clone();
+          caches.open(CACHE_NAME).then(cache => {
+            cache.put(event.request, responseToCache);
+          });
+          
+          return response;
+        });
+      })
+      .catch(() => {
+        // Offline-Fallback
+        return new Response('Offline - keine Verbindung', {
+          status: 503,
+          statusText: 'Service Unavailable',
+          headers: new Headers({ 'Content-Type': 'text/plain' })
+        });
+      })
   );
 });
