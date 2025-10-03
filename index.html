@@ -598,6 +598,10 @@
   #diag-last-error { color:#b50000; font-weight:600; }
 </style>
 
+
+    <link rel="apple-touch-icon" href="icon-192.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
 </head>
 <body>
     <div class="container">
@@ -1650,9 +1654,30 @@
 
         if ('serviceWorker' in navigator) {
             window.addEventListener('load', () => {
-                navigator.serviceWorker.register('./sw.js')
-                    .then(() => console.log('Service Worker registriert'))
-                    .catch(err => console.log('SW registration failed:', err));
+                
+navigator.serviceWorker.register('./sw.js').then(reg => {
+    console.log('Service Worker registriert', reg);
+    // Wenn bereits ein wartender Worker existiert: sofort aktivieren
+    if (reg.waiting) { reg.waiting.postMessage('SKIP_WAITING'); }
+    // Bei Updates
+    reg.addEventListener('updatefound', () => {
+        const nw = reg.installing;
+        if (nw) {
+            nw.addEventListener('statechange', () => {
+                if (nw.state === 'installed' && reg.waiting) {
+                    reg.waiting.postMessage('SKIP_WAITING');
+                }
+            });
+        }
+    });
+}).catch(err => console.log('SW registration failed:', err));
+
+// Neu laden, wenn der Controller wechselt (App-Update)
+navigator.serviceWorker.addEventListener('controllerchange', () => {
+    console.log('Neue Version aktiv – Seite wird aktualisiert…');
+    window.location.reload();
+});
+
             });
         }
     </script>
@@ -2003,5 +2028,19 @@ function stopRecording() {
 }
 </script>
 
+<script>
+
+document.addEventListener('DOMContentLoaded', () => {
+    const hash = location.hash;
+    if (hash === '#new') {
+        const b = document.getElementById('recordBtn');
+        if (b) { b.scrollIntoView({behavior:'smooth', block:'center'}); b.focus(); }
+    } else if (hash === '#entries') {
+        const e = document.querySelector('.entries-section');
+        if (e) e.scrollIntoView({behavior:'smooth', block:'start'});
+    }
+});
+
+</script>
 </body>
 </html>

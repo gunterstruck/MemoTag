@@ -21,5 +21,51 @@
       "type": "image/png",
       "purpose": "any maskable"
     }
+  ],
+  "id": "/",
+  "shortcuts": [
+    {
+      "name": "Neue Notiz",
+      "short_name": "Neu",
+      "description": "Neue Sprachnotiz aufnehmen",
+      "url": "/#new",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Meine Einträge",
+      "short_name": "Einträge",
+      "description": "Gespeicherte Notizen öffnen",
+      "url": "/#entries",
+      "icons": [
+        {
+          "src": "icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "screenshots/shot1.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow"
+    },
+    {
+      "src": "screenshots/shot2.png",
+      "sizes": "1080x1920",
+      "type": "image/png",
+      "form_factor": "narrow"
+    }
+  ],
+  "categories": [
+    "productivity",
+    "utilities",
+    "notes"
   ]
 }
