@@ -77,7 +77,7 @@
         }
 
         .api-setup {
-            background: #F3FF;
+            /* Hintergrundfarbe entfernt, da sie nicht benötigt wird, wenn die äußere Karte weiß ist und die inneren Elemente ihren eigenen Hintergrund haben */
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 15px;
@@ -86,6 +86,14 @@
             max-height: 500px; 
             opacity: 1;
         }
+        
+        /* NEU: Hintergrund für die API-Eingabefelder */
+        .api-setup .input-group input,
+        .api-setup .input-group select {
+             /* Helle, neutrale Farbe, die vorher fälschlicherweise knallpink war */
+            background-color: #F3F4F6;
+        }
+
 
         .api-setup.collapsed {
             max-height: 0 !important;
@@ -1833,7 +1841,7 @@
             Array.from(allTags).forEach(tag => {
                 const tagBtn = document.createElement('div');
                 // NEU: Aktive Klasse basierend auf activeTagFilter
-                tagBtn.className = `filter-tag ${activeTagFilter === tag ? 'active' : ''}`;
+            tagBtn.className = `filter-tag ${activeTagFilter === tag ? 'active' : ''}`;
                 tagBtn.textContent = tag;
                 tagBtn.addEventListener('click', () => filterByTag(tag));
                 container.appendChild(tagBtn);
