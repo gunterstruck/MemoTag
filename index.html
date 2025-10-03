@@ -1607,6 +1607,7 @@
 
     <div>Ereignis-Log</div>
     <div id="diag-log" aria-live="polite"></div>
+<div style="grid-column:1 / span 2; display:flex; gap:8px; margin-top:8px;"><button id="diagStart" type="button">Diagnose starten</button><button id="diagStop" type="button">Diagnose stoppen</button></div>
   </div>
 </section>
 
@@ -1738,6 +1739,51 @@
 
     window.__memotag.diag = { diagSetState, diagLog, diagError, startMicMeter, stopMicMeter };
   })();
+</script>
+
+
+<script id="diag-boost">
+(function(){
+  function onReady(fn){ if(document.readyState!=='loading') fn(); else document.addEventListener('DOMContentLoaded', fn); }
+
+  onReady(function(){
+    // Buttons
+    const btnStart = document.getElementById('diagStart');
+    const btnStop = document.getElementById('diagStop');
+    if(btnStart) btnStart.addEventListener('click', ()=> { window.__memotag?.diag?.startMicMeter(); window.__memotag?.diag?.diagLog('Diagnose manuell gestartet'); });
+    if(btnStop) btnStop.addEventListener('click', ()=> { window.__memotag?.diag?.stopMicMeter(); window.__memotag?.diag?.diagLog('Diagnose manuell gestoppt'); });
+
+    // Record button logging even if functions weren't replaced
+    const rbtn = document.getElementById('recordBtn');
+    if(rbtn){
+      rbtn.addEventListener('click', ()=>{
+        window.__memotag?.diag?.diagLog('Klick auf Aufnahme-Button (UI)');
+      }, {capture:true});
+    }
+
+    // Try to attach handlers to an existing recognition instance
+    let tries = 0;
+    const attachInterval = setInterval(()=>{
+      tries++;
+      const r = window.recognition;
+      if(r && !r.__diagAttached){
+        try{
+          const d = window.__memotag?.diag;
+          if(d){
+            const prevOnResult = r.onresult;
+            r.onstart = (e)=>{ d.diagSetState('läuft','state-ok'); d.diagLog('onstart (später attach)'); };
+            r.onresult = (ev)=>{ d.diagLog('onresult (' + ev.results.length + ' Segmente) [später attach]'); if(prevOnResult) prevOnResult(ev); };
+            r.onerror = (ev)=>{ d.diagError(ev.error || 'Unbekannter Fehler'); };
+            r.onend = ()=>{ d.diagLog('onend [später attach]'); if(window.isRecording){ try{ r.start(); }catch(e){ d.diagLog('Restart Fehler: ' + e.message); } } else { d.diagSetState('beendet','state-warn'); } };
+            r.__diagAttached = true;
+            d.diagLog('Diagnose an bestehende Recognition angehängt.');
+          }
+        }catch(e){ /* ignore */ }
+      }
+      if(tries>20) clearInterval(attachInterval);
+    }, 500);
+  });
+})();
 </script>
 
 </body>
