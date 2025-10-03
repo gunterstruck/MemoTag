@@ -960,7 +960,7 @@
             if (nfcBtn) nfcBtn.addEventListener('click', readNFC);
         }
 
-        // Dummy-Funktion für SpeechRecognition (wird nicht mehr genutzt, aber zur Sicherheit behalten)
+        // Dummy-Funktion für SpeechRecognition (wird nicht mehr primär genutzt, aber zur Sicherheit behalten)
         function initSpeechRecognition() {} 
         
         // NEU: NFC Button Logik (Anzeige)
@@ -987,15 +987,23 @@
             try {
                 const ndef = new NDEFReader();
                 
-                // Wir müssen scan() aufrufen, um das Reading-Ereignis zu hören.
-                // Es wird kein Promise zurückgegeben, das auf das Tag wartet.
+                // Wir verwenden scan() mit einem Promise, um sicherzustellen, dass wir auf eine erfolgreiche 
+                // Initialisierung warten, bevor wir die onreading/onreadingerror-Handler setzen.
+                // NOTE: ndef.scan() gibt KEIN Promise zurück, das auf das Tag wartet, sondern ein Promise, 
+                // das auflöst, sobald der Reader bereit ist. Die eigentliche Lese-Logik muss in onreading.
+                // Die aktuelle Struktur im vorherigen Code war korrekt, wird hier aber robuster gemacht.
+                
+                // Der Scan-Vorgang beginnt hier.
                 await ndef.scan();
                 
                 // Listener für den Lese-Fehler
                 ndef.onreadingerror = (e) => {
-                    showError('NFC Lese-Fehler: Tag ungültig oder entfernt.');
-                    try { if(window.__memotag?.diag) __memotag.diag.diagError('NFC Lese-Fehler'); } catch(_) {}
-                    updateRecordButton('Bereit zur Aufnahme');
+                    // Stellt sicher, dass wir nur Fehler behandeln, wenn wir aktiv scannen
+                    if (document.getElementById('status').textContent.includes('NFC')) {
+                        showError('NFC Lese-Fehler: Tag ungültig, leer, oder Scan abgebrochen.');
+                        try { if(window.__memotag?.diag) __memotag.diag.diagError('NFC Lese-Fehler: ' + (e.message || 'Unknown error')); } catch(_) {}
+                        updateRecordButton('Bereit zur Aufnahme');
+                    }
                 };
 
                 // Listener für erfolgreiches Lesen
@@ -1011,6 +1019,7 @@
                         processNFCReadout(text);
                     } else {
                         showError('NFC-Tag enthält keinen lesbaren Text-Eintrag (NDEF-Text-Record fehlt).');
+                        try { if(window.__memotag?.diag) __memotag.diag.diagError('NFC: Kein Text-Record gefunden.'); } catch(_) {}
                         updateRecordButton('Bereit zur Aufnahme');
                     }
                 };
@@ -1025,9 +1034,12 @@
                 }, 20000); 
 
             } catch (error) {
-                const errMsg = error.message.includes('permission') 
-                    ? 'NFC-Zugriff verweigert (Bitte Browser-Berechtigungen prüfen).' 
-                    : `NFC-Fehler: ${error.message}`;
+                const errMsg = error.name === 'NotAllowedError' 
+                    ? 'NFC-Zugriff verweigert. Bitte prüfen Sie die Browser- und Systemberechtigungen.' 
+                    : error.message.includes('No such device') 
+                        ? 'NFC ist möglicherweise deaktiviert oder nicht verfügbar.'
+                        : `NFC-Fehler: ${error.message}`;
+                        
                 showError(errMsg);
                 try { if(window.__memotag?.diag) __memotag.diag.diagError(`NFC Scan Fehler: ${error.message}`); } catch(_) {}
                 updateRecordButton('Bereit zur Aufnahme');
