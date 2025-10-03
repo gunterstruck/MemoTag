@@ -72,9 +72,15 @@
             transition: transform 0.3s;
         }
 
+        /* NEU: Icon ist beim Start eingeklappt (rotiert) */
         .header:not(.expanded) .settings-icon {
-            transform: rotate(90deg);
+            transform: rotate(-90deg); /* Zeigt den Pfeil nach unten/rechts */
         }
+        /* Wenn aufgeklappt (expanded), zeigt der Pfeil nach oben/links */
+        .header.expanded .settings-icon {
+            transform: rotate(0deg); /* Zeigt das Zahnrad aufrecht im aufgeklappten Zustand */
+        }
+
 
         .api-setup {
             /* Hintergrundfarbe entfernt, da sie nicht benötigt wird, wenn die äußere Karte weiß ist und die inneren Elemente ihren eigenen Hintergrund haben */
@@ -690,7 +696,6 @@
   .state-warn { background:#fff4e6; color:#a15a00; }
   .state-err { background:#ffe8e6; color:#b50000; }
   .level-wrap { width:100%; height:10px; background:#eee; border-radius:6px; overflow:hidden; }
-  .level-bar { height:100%; width:0%; transition: width .08s linear; }
   .level-bar.anim { background: linear-gradient(90deg, #a78bfa, #7c3aed); }
   #diag-log { max-height: 140px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; background:#fafafa; border:1px solid #eee; border-radius:8px; padding:8px; }
   #diag-log .line { padding:2px 0; border-bottom:1px dashed #eee;}
@@ -894,7 +899,7 @@
         let editingEntryId = null;
         let activeTagFilter = null;
         let confirmCallback = null;
-        let isApiSetupExpanded = true; // NEU: Zustand für das Aufklappen
+        let isApiSetupExpanded = false; // NEU: Standardmäßig auf FALSE gesetzt!
 
         const DIARY_KEY = 'diary_entries_v2';
 
@@ -915,6 +920,9 @@
 
             // NEU: Diagnose beim Start einklappen
             document.getElementById('diagnostics').classList.add('collapsed');
+            
+            // Die Logik zum Aufklappen wird jetzt von loadAPIKey aufgerufen, 
+            // damit der DOM-Wert des Keys gelesen werden kann.
         });
 
         function getEntries() {
@@ -950,15 +958,16 @@
             const apiKey = document.getElementById('apiKey').value.trim(); // <-- Liest den aktuellen (wiederhergestellten) Wert
             const setupEl = document.getElementById('apiSetup');
             const headerEl = document.getElementById('header');
-
-            // NEU: Wenn API Key hinterlegt ist, starten wir collapsed.
-            // Der Wert ist hier garantiert aus localStorage/Browser-Autofill geladen.
+            
+            // Logik: Nur aufklappen, wenn KEIN Schlüssel vorhanden ist
             if (apiKey && apiKey.length > 0) {
+                // Schlüssel vorhanden -> geschlossen starten
                 isApiSetupExpanded = false; 
                 setupEl.classList.add('collapsed');
                 headerEl.classList.remove('expanded');
             } else {
-                isApiSetupExpanded = true; // Start expanded
+                // KEIN Schlüssel vorhanden -> geöffnet starten
+                isApiSetupExpanded = true; 
                 setupEl.classList.remove('collapsed');
                 headerEl.classList.add('expanded');
             }
@@ -1797,7 +1806,7 @@
                     cb.setAttribute('aria-label', `Notiz vom ${new Date(entry.timestamp).toLocaleDateString('de-DE')} auswählen`);
                     cb.addEventListener('change', e => {
                         if (e.target.checked) selectedEntries.add(entry.id);
-                        else selectedEntries.delete(entry.id);
+                        else selectedEntries.delete(e.target.id);
                         updateBatchActionsVisibility();
                     });
                     entryDiv.appendChild(cb);
