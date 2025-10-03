@@ -1,4 +1,4 @@
-const CACHE_NAME = 'sprach-tagebuch-v2';
+const CACHE_NAME = 'sprach-tagebuch-v4';
 const ASSETS_TO_CACHE = [
   './',
   './index.html',
