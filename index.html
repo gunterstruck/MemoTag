@@ -1576,5 +1576,114 @@
             });
         }
     </script>
+<script>
+function initSpeechRecognition() {
+  const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+  if (!SR) {
+    const btn = document.getElementById('recordBtn');
+    if (btn) btn.disabled = true;
+    showError && showError('Spracherkennung wird in diesem Browser nicht unterstützt.');
+    return;
+  }
+  try { if (window.recognition && window.recognition.abort) window.recognition.abort(); } catch (e) {}
+  const rec = new SR();
+  rec.continuous = true;
+  rec.interimResults = true;
+  rec.lang = 'de-DE';
+
+  rec.onresult = (event) => {
+    let interim = '';
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        window.currentTranscript = (window.currentTranscript || '') + event.results[i][0].transcript + ' ';
+      } else {
+        interim += event.results[i][0].transcript;
+      }
+    }
+    const ta = document.getElementById('transcript');
+    if (ta) ta.value = (window.currentTranscript || '') + interim;
+  };
+
+  rec.onerror = (event) => {
+    console.error('Speech recognition error:', event.error);
+    try { stopRecording(); } catch(e) {}
+  };
+
+  rec.onend = () => {
+    if (window.isRecording) {
+      try { rec.start(); } catch (e) { /* ignore */ }
+    }
+  };
+
+  window.recognition = rec;
+}
+function startRecording() {
+  window.currentTranscript = '';
+  const transcriptEl = document.getElementById('transcript');
+  if (transcriptEl) transcriptEl.value = '';
+  const ts = document.getElementById('transcriptSection');
+  const ss = document.getElementById('summarySection');
+  if (ts) ts.style.display = 'none';
+  if (ss) ss.style.display = 'none';
+
+  initSpeechRecognition();
+
+  setTimeout(() => {
+    if (!window.recognition) return;
+    try { window.recognition.start(); } catch(e) { console.warn(e); }
+    window.isRecording = true;
+    const btn = document.getElementById('recordBtn');
+    if (btn) {
+      btn.classList.add('recording');
+      btn.textContent = '⏹️';
+      btn.setAttribute('aria-label', 'Aufnahme stoppen');
+    }
+    const status = document.getElementById('status');
+    if (status) status.textContent = 'Aufnahme läuft...';
+
+    const loc = document.getElementById('locationPermission');
+    if (loc && loc.checked && typeof getCurrentLocation === 'function') getCurrentLocation();
+  }, 50);
+
+  // Auto-timeout as safety net (e.g., 90s)
+  clearTimeout(window.__recTimeout);
+  window.__recTimeout = setTimeout(() => {
+    try { stopRecording(); } catch(e) {}
+  }, 90 * 1000);
+}
+function stopRecording() {
+  clearTimeout(window.__recTimeout);
+  try { if (window.recognition && window.recognition.stop) window.recognition.stop(); } catch(e) {}
+  try { if (window.recognition && window.recognition.abort) window.recognition.abort(); } catch(e) {}
+  window.isRecording = false;
+
+  const btn = document.getElementById('recordBtn');
+  if (btn) {
+    btn.classList.remove('recording');
+    btn.textContent = '🎤';
+    btn.setAttribute('aria-label', 'Aufnahme starten');
+  }
+  const status = document.getElementById('status');
+  if (status) status.textContent = 'Aufnahme beendet';
+
+  const text = (window.currentTranscript || '').trim();
+  if (text) {
+    const ts = document.getElementById('transcriptSection');
+    if (ts) ts.style.display = 'block';
+    const ta = document.getElementById('transcript');
+    if (ta) ta.value = text;
+  }
+}
+function toggleRecording() {
+  const btn = document.getElementById('recordBtn');
+  if (window.isRecording) {
+    stopRecording();
+  } else {
+    // Guard against double clicks
+    if (btn && btn.disabled) return;
+    startRecording();
+  }
+}
+</script>
 </body>
 </html>
