@@ -39,6 +39,21 @@
             font-size: 28px;
             margin-bottom: 15px;
             overflow-wrap: break-word;
+            /* NEU: Macht den Titel klickbar, um die Einstellungen umzuschalten */
+            cursor: pointer; 
+            display: flex;
+            align-items: center;
+            gap: 10px;
+        }
+
+        .settings-icon {
+            font-size: 20px;
+            color: #4F46E5;
+            transition: transform 0.3s;
+        }
+
+        .header.expanded .settings-icon {
+            transform: rotate(90deg);
         }
 
         .api-setup {
@@ -46,6 +61,19 @@
             padding: 15px;
             border-radius: 10px;
             margin-bottom: 15px;
+            /* NEU: Animation für das Ein-/Ausklappen */
+            transition: max-height 0.5s ease-out, opacity 0.5s ease-out, padding 0.5s ease-out, margin-bottom 0.5s ease-out;
+            overflow: hidden;
+            max-height: 500px; /* Startwert */
+            opacity: 1;
+        }
+
+        .api-setup.collapsed {
+            max-height: 0;
+            opacity: 0;
+            padding-top: 0;
+            padding-bottom: 0;
+            margin-bottom: 0;
         }
 
         .input-group {
@@ -349,6 +377,7 @@
             margin-bottom: 15px;
         }
 
+        /* NEUE STILE FÜR AKTIVEN FILTER TAG */
         .filter-tag {
             background: #F3F4F6;
             color: #374151;
@@ -612,10 +641,15 @@
 </head>
 <body>
     <div class="container">
-        <div class="header">
-            <h1>Sprach-Tagebuch Pro</h1>
+        <!-- NEU: Header-Div erhält die Klasse 'expanded' beim Laden, wenn kein API-Schlüssel hinterlegt ist -->
+        <div class="header" id="header">
+            <!-- NEU: Klickbares H1 für Toggle -->
+            <h1 id="headerTitle">
+                Sprach-Tagebuch Pro
+                <span class="settings-icon" id="settingsIcon">⚙️</span>
+            </h1>
             
-            <div class="api-setup">
+            <div class="api-setup" id="apiSetup">
                 <div class="input-group">
                     <label for="apiProvider">KI-Anbieter:</label>
                     <select id="apiProvider">
@@ -703,6 +737,7 @@
 
             <div class="batch-actions" id="batchActions">
                 <button class="btn-primary" id="summarizeSelectedBtn">Gesamt-Zusammenfassung</button>
+                <button class="btn-primary" id="mergeSelectedBtn">Zusammenführen</button>
                 <button class="btn-secondary" id="tagSelectedBtn">Tags setzen</button>
                 <button class="btn-secondary" id="exportSelectedBtn">Exportieren</button>
                 <button class="btn-secondary" id="shareSelectedBtn">Teilen</button>
@@ -747,7 +782,8 @@
     <div class="modal" id="batchSummaryModal" role="dialog" aria-labelledby="batchSummaryTitle">
         <div class="modal-content">
             <div class="modal-header">
-                <h2 class="section-title" id="batchSummaryTitle">Zusammenfassung mehrerer Notizen</h2>
+                <!-- Titel wird dynamisch in JS gesetzt (Zusammenfassung vs. Zusammenführung) -->
+                <h2 class="section-title" id="batchSummaryTitle">Ergebnis der Stapelaktion</h2>
                 <button class="modal-close" id="closeBatchSummaryModal" aria-label="Schließen">✕</button>
             </div>
             <div class="loading show" id="batchSummaryLoading" role="status">KI erstellt Gesamt-Zusammenfassung...</div>
@@ -790,6 +826,7 @@
         let editingEntryId = null;
         let activeTagFilter = null;
         let confirmCallback = null;
+        let isApiSetupExpanded = true; // NEU: Zustand für das Aufklappen
 
         const DIARY_KEY = 'diary_entries_v2';
 
@@ -803,6 +840,9 @@
             // Wichtiger Aufruf, um die MediaRecorder-Logik zu initialisieren
             initMediaRecorderFallback();
             initIOSFallback(); // Behält das Audio-Upload-Handling
+            
+            // NEU: API Setup beim Start verbergen/zeigen
+            checkAndSetApiSetupState();
         });
 
         function getEntries() {
@@ -817,16 +857,42 @@
             loadEntries();
             updateAvailableTags(); 
         }
+        
+        // NEU: Logik zum Ein-/Ausklappen der API-Einstellungen
+        function toggleApiSetup() {
+            isApiSetupExpanded = !isApiSetupExpanded;
+            const setupEl = document.getElementById('apiSetup');
+            const headerEl = document.getElementById('header');
+            
+            if (isApiSetupExpanded) {
+                setupEl.classList.remove('collapsed');
+                headerEl.classList.add('expanded');
+            } else {
+                setupEl.classList.add('collapsed');
+                headerEl.classList.remove('expanded');
+            }
+        }
+        
+        // NEU: Prüft beim Laden, ob API-Schlüssel vorhanden und passt den Zustand an
+        function checkAndSetApiSetupState() {
+            const apiKey = localStorage.getItem('api_key');
+            if (apiKey && apiKey.trim().length > 0) {
+                isApiSetupExpanded = false;
+            } else {
+                isApiSetupExpanded = true;
+            }
+            toggleApiSetup(); // Führt die initiale Zustandsänderung durch
+        }
+
 
         function setupEventListeners() {
+            // NEU: Event-Listener für den Header-Titel
+            document.getElementById('headerTitle').addEventListener('click', toggleApiSetup);
+            
             document.getElementById('apiKey').addEventListener('change', saveAPIKey);
             document.getElementById('apiProvider').addEventListener('change', saveAPIKey);
             document.getElementById('recordBtn').addEventListener('click', toggleRecording);
             
-            // Diese Buttons wurden aus der UI entfernt und ihre Logik automatisiert:
-            // document.getElementById('summarizeBtn').addEventListener('click', summarize); 
-            // document.getElementById('cancelBtn').addEventListener('click', cancelTranscript);
-
             document.getElementById('saveBtn').addEventListener('click', saveEntry);
             document.getElementById('editCancelBtn').addEventListener('click', resetForm); // Zurücksetzen, nicht nur Abbrechen
             document.getElementById('locationPermission').addEventListener('change', handleLocationPermission);
@@ -846,6 +912,7 @@
             document.getElementById('toggleSelectionBtn').addEventListener('click', toggleSelectionMode);
             
             document.getElementById('summarizeSelectedBtn').addEventListener('click', summarizeSelected);
+            document.getElementById('mergeSelectedBtn').addEventListener('click', mergeSelected); // NEU: Event-Listener für Zusammenführen
             document.getElementById('tagSelectedBtn').addEventListener('click', tagSelected);
             document.getElementById('exportSelectedBtn').addEventListener('click', exportSelected);
             document.getElementById('shareSelectedBtn').addEventListener('click', shareSelected);
@@ -969,6 +1036,10 @@
                 }
 
                 try { if(window.__memotag?.diag) __memotag.diag.diagLog('Recorder gestartet: ' + mime); } catch(_) {}
+                
+                // Starte Mic Meter für Diagnose
+                try { if(window.__memotag?.diag) __memotag.diag.startMicMeter(); } catch(_) {}
+
 
             }catch(err){
                 const errMsg = err.name === 'NotAllowedError' ? 'Mikrofonzugriff verweigert.' : (err.message || err);
@@ -982,6 +1053,7 @@
             try{ 
                 __mr.stop(); 
                 try { if(window.__memotag?.diag) __memotag.diag.diagLog('Recorder Stopp-Kommando gesendet. Warte auf onstop Event...'); } catch(_) {}
+                try { if(window.__memotag?.diag) __memotag.diag.stopMicMeter(); } catch(_) {} // Mic Meter stoppen
                 updateRecordButton('Verarbeite...');
             }catch(_){}
             stopStream(__mrStream);
@@ -1583,6 +1655,7 @@
             if (allTags.size === 0 && !activeTagFilter) return;
 
             const allBtn = document.createElement('div');
+            // NEU: Aktive Klasse basierend auf activeTagFilter
             allBtn.className = `filter-tag ${!activeTagFilter ? 'active' : ''}`;
             allBtn.textContent = 'Alle';
             allBtn.addEventListener('click', () => filterByTag(null));
@@ -1590,6 +1663,7 @@
 
             Array.from(allTags).forEach(tag => {
                 const tagBtn = document.createElement('div');
+                // NEU: Aktive Klasse basierend auf activeTagFilter
                 tagBtn.className = `filter-tag ${activeTagFilter === tag ? 'active' : ''}`;
                 tagBtn.textContent = tag;
                 tagBtn.addEventListener('click', () => filterByTag(tag));
@@ -1598,8 +1672,10 @@
         }
 
         function filterByTag(tag) {
+            // NEU: activeTagFilter setzen/zurücksetzen und dann Einträge neu laden
             activeTagFilter = tag;
             loadEntries();
+            updateTagFilter(getEntries()); // Wichtig: Filter-Buttons aktualisieren
         }
 
         function toggleSelectionMode() {
@@ -1631,7 +1707,8 @@
             const provider = document.getElementById('apiProvider').value;
             
             if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
-
+            
+            document.getElementById('batchSummaryTitle').textContent = 'Gesamt-Zusammenfassung';
             document.getElementById('batchSummaryModal').classList.add('show');
             document.getElementById('batchSummaryText').style.display = 'none';
             document.getElementById('batchSummaryActions').style.display = 'none';
@@ -1654,6 +1731,54 @@
                 showError('Fehler beim Zusammenfassen: ' + error.message, 'batchSummarySuccess');
             }
         }
+        
+        // NEU: Funktion zum Zusammenführen von Einträgen ohne Informationsverlust
+        async function mergeSelected() {
+            const allEntries = getEntries();
+            const entries = allEntries.filter(e => selectedEntries.has(e.id));
+            if (entries.length === 0) return;
+
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            
+            if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
+            
+            document.getElementById('batchSummaryTitle').textContent = 'Zusammenführung (Daten-Kompilation)';
+            document.getElementById('batchSummaryModal').classList.add('show');
+            document.getElementById('batchSummaryText').style.display = 'none';
+            document.getElementById('batchSummaryActions').style.display = 'none';
+            document.getElementById('batchSummaryLoading').classList.add('show');
+            document.getElementById('batchSummarySuccess').classList.remove('show');
+            document.getElementById('batchSummaryLoading').textContent = 'KI führt Einträge zusammen...';
+
+
+            try {
+                const combinedText = entries.map((e, i) => `--- Eintrag ${i + 1} ---\n${e.text}`).join('\n\n');
+                
+                // Strenger Prompt zur Kompilation von Daten und Listen
+                const prompt = `Führe die folgenden ${entries.length} Notizen zusammen, ohne Informationen zu verlieren oder zu verallgemeinern. Deine Aufgabe ist die detailgetreue Kompilation.
+                
+                Wichtige Regeln:
+                1. KEINE Zusammenfassung, KEINE Verallgemeinerung.
+                2. Wenn es sich um Listen (z.B. Einkaufslisten, To-Do-Listen) handelt, kompiliere diese direkt in EINE EINZIGE, VOLLSTÄNDIGE Liste.
+                3. Erhalte alle spezifischen Details (z.B. genaue Produktnamen, Zahlen, Adressen).
+                
+                Texte zum Zusammenführen:
+                
+                ${combinedText}`;
+
+                let result = await callLLMAPI(prompt, apiKey, provider);
+
+                document.getElementById('batchSummaryLoading').classList.remove('show');
+                document.getElementById('batchSummaryText').value = result;
+                document.getElementById('batchSummaryText').style.display = 'block';
+                document.getElementById('batchSummaryActions').style.display = 'flex';
+            } catch (error) {
+                document.getElementById('batchSummaryLoading').classList.remove('show');
+                showError('Fehler beim Zusammenführen: ' + error.message, 'batchSummarySuccess');
+            }
+        }
+
 
         function saveBatchSummary() {
             const summary = document.getElementById('batchSummaryText').value.trim();
@@ -1664,15 +1789,16 @@
                 text: summary,
                 timestamp: new Date().toISOString(),
                 location: null,
-                tags: ['Zusammenfassung'],
-                transcript: `Zusammenfassung von ${selectedEntries.size} Notizen`
+                // Tag anpassen, je nachdem, welche Aktion zuletzt ausgeführt wurde
+                tags: [document.getElementById('batchSummaryTitle').textContent.includes('Zusammenfassung') ? 'Zusammenfassung' : 'Kompilation'],
+                transcript: `${document.getElementById('batchSummaryTitle').textContent} von ${selectedEntries.size} Notizen`
             };
 
             const entries = getEntries();
             entries.unshift(entry);
             saveEntries(entries);
 
-            showSuccess('Zusammenfassung gespeichert!', 'batchSummarySuccess');
+            showSuccess('Ergebnis gespeichert!', 'batchSummarySuccess');
             setTimeout(() => closeBatchSummaryModal(), 1000);
         }
 
@@ -1682,6 +1808,9 @@
             document.getElementById('batchSummaryText').style.display = 'none';
             document.getElementById('batchSummaryActions').style.display = 'none';
             document.getElementById('batchSummaryLoading').classList.add('show');
+            // Titel für das nächste Mal zurücksetzen
+            document.getElementById('batchSummaryTitle').textContent = 'Ergebnis der Stapelaktion';
+            document.getElementById('batchSummaryLoading').textContent = 'KI erstellt Gesamt-Zusammenfassung...';
         }
 
         function copyBatchSummary() {
@@ -1776,6 +1905,8 @@
         function saveAPIKey() {
             localStorage.setItem('api_key', document.getElementById('apiKey').value);
             localStorage.setItem('api_provider', document.getElementById('apiProvider').value);
+            // NEU: Status nach dem Speichern der API-Schlüssel überprüfen und zuklappen
+            checkAndSetApiSetupState();
         }
 
         function loadAPIKey() {
