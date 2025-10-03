@@ -1,0 +1,1580 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="theme-color" content="#4F46E5">
+    <meta name="description" content="Sprach-Tagebuch mit KI-Zusammenfassungen">
+    <title>Sprach-Tagebuch Pro</title>
+    <link rel="manifest" href="manifest.webmanifest">
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+
+        .container {
+            max-width: 900px;
+            margin: 0 auto;
+        }
+
+        .header {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        h1 {
+            color: #4F46E5;
+            font-size: 28px;
+            margin-bottom: 15px;
+            overflow-wrap: break-word;
+        }
+
+        .api-setup {
+            background: #F3F4F6;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+        }
+
+        .input-group {
+            margin-bottom: 10px;
+        }
+
+        label {
+            display: block;
+            font-size: 14px;
+            color: #374151;
+            margin-bottom: 5px;
+            font-weight: 500;
+        }
+
+        input[type="text"], input[type="password"], select, textarea {
+            width: 100%;
+            padding: 10px;
+            border: 2px solid #E5E7EB;
+            border-radius: 8px;
+            font-size: 14px;
+            transition: border-color 0.3s;
+        }
+
+        input:focus, select:focus, textarea:focus {
+            outline: none;
+            border-color: #4F46E5;
+        }
+        
+        .record-section {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        .record-button {
+            width: 120px;
+            height: 120px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            border: none;
+            color: white;
+            font-size: 48px;
+            cursor: pointer;
+            transition: all 0.3s;
+            box-shadow: 0 5px 20px rgba(102, 126, 234, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 20px auto;
+        }
+
+        .record-button:hover {
+            transform: scale(1.05);
+        }
+
+        .record-button:focus {
+            outline: 3px solid #818CF8;
+            outline-offset: 3px;
+        }
+
+        .record-button.recording {
+            background: linear-gradient(135deg, #EF4444 0%, #DC2626 100%);
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0%, 100% { transform: scale(1); }
+            50% { transform: scale(1.05); }
+        }
+
+        .status {
+            font-size: 16px;
+            color: #6B7280;
+            margin-top: 10px;
+        }
+
+        .transcript-section, .summary-section {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            margin-bottom: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+            display: none;
+        }
+
+        .section-title {
+            font-size: 18px;
+            color: #4F46E5;
+            margin-bottom: 15px;
+            font-weight: 600;
+        }
+
+        textarea {
+            min-height: 150px;
+            resize: vertical;
+            font-family: inherit;
+        }
+
+        .button-group {
+            display: flex;
+            gap: 10px;
+            margin-top: 15px;
+            flex-wrap: wrap;
+        }
+
+        button {
+            padding: 12px 20px;
+            border: none;
+            border-radius: 10px;
+            font-size: 14px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 5px;
+        }
+
+        button:focus {
+            outline: 2px solid #4F46E5;
+            outline-offset: 2px;
+        }
+
+        .btn-primary {
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            color: white;
+            flex: 1;
+        }
+
+        .btn-primary:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+        }
+
+        .btn-secondary {
+            background: #F3F4F6;
+            color: #374151;
+            flex: 1;
+        }
+
+        .btn-secondary:hover {
+            background: #E5E7EB;
+        }
+
+        .btn-icon {
+            background: #F3F4F6;
+            color: #374151;
+            padding: 10px 15px;
+            flex: 1;
+        }
+
+        .btn-icon:hover {
+            background: #E5E7EB;
+        }
+
+        .tags-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #F3F4F6;
+        }
+
+        .tags-input-group {
+            display: flex;
+            gap: 10px;
+            margin-bottom: 10px;
+        }
+
+        .tags-input-group input {
+            flex: 1;
+        }
+
+        .tags-input-group button {
+            flex: 0 0 auto;
+        }
+
+        .tag-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 8px;
+            margin-top: 10px;
+        }
+
+        .tag {
+            background: #EEF2FF;
+            color: #4F46E5;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            display: flex;
+            align-items: center;
+            gap: 6px;
+        }
+
+        .tag-remove {
+            background: none;
+            border: none;
+            color: #4F46E5;
+            cursor: pointer;
+            padding: 0;
+            width: 16px;
+            height: 16px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            border-radius: 50%;
+            font-size: 12px;
+        }
+
+        .tag-remove:hover {
+            background: #4F46E5;
+            color: white;
+        }
+
+        .reformulate-section {
+            margin-top: 15px;
+            padding-top: 15px;
+            border-top: 2px solid #F3F4F6;
+        }
+
+        .reformulate-buttons {
+            display: flex;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .entries-section {
+            background: white;
+            border-radius: 20px;
+            padding: 20px;
+            box-shadow: 0 10px 30px rgba(0,0,0,0.2);
+        }
+
+        .entries-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
+        }
+
+        .tag-filter {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+            margin-bottom: 15px;
+        }
+
+        .filter-tag {
+            background: #F3F4F6;
+            color: #374151;
+            padding: 6px 12px;
+            border-radius: 20px;
+            font-size: 13px;
+            cursor: pointer;
+            border: 2px solid transparent;
+            transition: all 0.3s;
+        }
+
+        .filter-tag:hover {
+            background: #E5E7EB;
+        }
+
+        .filter-tag.active {
+            background: #4F46E5;
+            color: white;
+            border-color: #4F46E5;
+        }
+
+        .selection-mode-btn {
+            background: #4F46E5;
+            color: white;
+            padding: 8px 16px;
+            border-radius: 8px;
+            font-size: 14px;
+        }
+
+        .batch-actions {
+            display: none;
+            background: #FEF3C7;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            gap: 10px;
+            flex-wrap: wrap;
+        }
+
+        .batch-actions.show {
+            display: flex;
+        }
+
+        .batch-actions button {
+            flex: 0 0 auto;
+            padding: 8px 16px;
+            font-size: 13px;
+        }
+
+        .entry {
+            background: #F9FAFB;
+            padding: 15px;
+            border-radius: 10px;
+            margin-bottom: 15px;
+            border-left: 4px solid #4F46E5;
+            position: relative;
+        }
+
+        .entry.selection-mode {
+            padding-left: 50px;
+        }
+
+        .entry-checkbox {
+            position: absolute;
+            left: 15px;
+            top: 20px;
+            width: 20px;
+            height: 20px;
+            cursor: pointer;
+        }
+
+        .entry-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: flex-start;
+            margin-bottom: 10px;
+            gap: 10px;
+        }
+
+        .entry-date {
+            font-size: 14px;
+            color: #4F46E5;
+            font-weight: 600;
+        }
+
+        .entry-location {
+            font-size: 12px;
+            color: #6B7280;
+            margin-top: 2px;
+        }
+
+        .entry-tags {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 6px;
+            margin: 8px 0;
+        }
+
+        .entry-text {
+            color: #374151;
+            line-height: 1.6;
+            white-space: pre-wrap;
+            margin-bottom: 10px;
+        }
+
+        .entry-actions {
+            display: flex;
+            gap: 8px;
+            flex-wrap: wrap;
+        }
+
+        .entry-actions button {
+            padding: 6px 12px;
+            font-size: 12px;
+        }
+
+        .delete-btn {
+            background: #EF4444;
+            color: white;
+        }
+
+        .delete-btn:hover {
+            background: #DC2626;
+        }
+
+        .empty-state {
+            text-align: center;
+            padding: 40px;
+            color: #9CA3AF;
+        }
+
+        .loading {
+            display: none;
+            text-align: center;
+            color: #6B7280;
+            padding: 10px;
+        }
+
+        .loading.show {
+            display: block;
+        }
+
+        .error {
+            background: #FEE2E2;
+            color: #991B1B;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .error.show {
+            display: block;
+        }
+
+        .success {
+            background: #D1FAE5;
+            color: #065F46;
+            padding: 10px;
+            border-radius: 8px;
+            margin-top: 10px;
+            display: none;
+        }
+
+        .success.show {
+            display: block;
+        }
+
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 1000;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .modal.show {
+            display: flex;
+        }
+
+        .modal-content {
+            background: white;
+            border-radius: 20px;
+            padding: 30px;
+            max-width: 600px;
+            width: 100%;
+            max-height: 80vh;
+            overflow-y: auto;
+            position: relative;
+        }
+
+        .modal-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 20px;
+        }
+
+        .modal-close {
+            background: #F3F4F6;
+            border: none;
+            width: 32px;
+            height: 32px;
+            border-radius: 50%;
+            cursor: pointer;
+            font-size: 18px;
+        }
+
+        @media (max-width: 640px) {
+            body {
+                padding: 10px;
+            }
+            
+            h1 {
+                font-size: 22px;
+            }
+            
+            .button-group, .reformulate-buttons {
+                flex-direction: column;
+            }
+            
+            .btn-icon {
+                flex: 1 1 100%;
+            }
+
+            .tags-input-group {
+                flex-direction: column;
+            }
+
+            .tags-input-group button {
+                flex: 1 1 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>Sprach-Tagebuch Pro</h1>
+            
+            <div class="api-setup">
+                <div class="input-group">
+                    <label for="apiProvider">KI-Anbieter:</label>
+                    <select id="apiProvider">
+                        <option value="anthropic">Anthropic (Claude)</option>
+                        <option value="openai">OpenAI (GPT)</option>
+                        <option value="gemini">Google (Gemini)</option>
+                    </select>
+                </div>
+                <div class="input-group">
+                    <label for="apiKey">API-Schlüssel:</label>
+                    <input type="password" id="apiKey" placeholder="Dein API-Schlüssel">
+                </div>
+                <div class="input-group">
+                    <label>
+                        <input type="checkbox" id="locationPermission">
+                        Standort-Freigabe (optional)
+                    </label>
+                </div>
+            </div>
+        </div>
+
+        <div class="record-section">
+            <h2 class="section-title">Neue Notiz aufnehmen</h2>
+            <button class="record-button" id="recordBtn" aria-label="Aufnahme starten">🎤</button>
+            <div class="status" id="status" role="status" aria-live="polite">Bereit zur Aufnahme</div>
+        </div>
+
+        <div class="transcript-section" id="transcriptSection">
+            <h2 class="section-title">Transkription</h2>
+            <textarea id="transcript" readonly aria-label="Transkribierter Text"></textarea>
+            <div class="button-group">
+                <button class="btn-primary" id="summarizeBtn">Zusammenfassen</button>
+                <button class="btn-secondary" id="cancelBtn">Abbrechen</button>
+            </div>
+            <div class="loading" id="loading" role="status">KI erstellt Zusammenfassung...</div>
+            <div class="error" id="error" role="alert"></div>
+        </div>
+
+        <div class="summary-section" id="summarySection">
+            <h2 class="section-title">Zusammenfassung</h2>
+            <textarea id="summary" aria-label="Zusammenfassung bearbeiten"></textarea>
+            
+            <div class="tags-section">
+                <label>Tags hinzufügen:</label>
+                <div class="tags-input-group">
+                    <input type="text" id="newTag" placeholder="z.B. Arbeit, Einkauf, Idee...">
+                    <button class="btn-secondary" id="addTagBtn">+ Tag</button>
+                </div>
+                <div class="tag-list" id="currentTags"></div>
+            </div>
+
+            <div class="reformulate-section">
+                <label>Neu formulieren:</label>
+                <div class="reformulate-buttons">
+                    <button class="btn-icon" id="reformulateShorter">Kürzer</button>
+                    <button class="btn-icon" id="reformulateFormal">Formeller</button>
+                    <button class="btn-icon" id="reformulateCasual">Lockerer</button>
+                </div>
+                <div class="loading" id="reformulateLoading" role="status">KI formuliert um...</div>
+            </div>
+
+            <div class="button-group">
+                <button class="btn-primary" id="saveBtn">Speichern</button>
+                <button class="btn-icon" id="copyBtn">Kopieren</button>
+                <button class="btn-icon" id="shareBtn">Teilen</button>
+                <button class="btn-secondary" id="editCancelBtn">Abbrechen</button>
+            </div>
+            <div class="success" id="success" role="status"></div>
+        </div>
+
+        <div class="entries-section">
+            <div class="entries-header">
+                <h2 class="section-title">Meine Einträge</h2>
+                <button class="selection-mode-btn" id="toggleSelectionBtn">Auswählen</button>
+            </div>
+
+            <div class="batch-actions" id="batchActions">
+                <button class="btn-primary" id="summarizeSelectedBtn">Gesamt-Zusammenfassung</button>
+                <button class="btn-secondary" id="tagSelectedBtn">Tags setzen</button>
+                <button class="btn-secondary" id="exportSelectedBtn">Exportieren</button>
+                <button class="btn-secondary" id="shareSelectedBtn">Teilen</button>
+                <button class="delete-btn" id="deleteSelectedBtn">Löschen</button>
+            </div>
+
+            <div class="tag-filter" id="tagFilter"></div>
+            <div id="entries"></div>
+        </div>
+    </div>
+
+    <!-- Edit Modal -->
+    <div class="modal" id="editModal" role="dialog" aria-labelledby="editModalTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="section-title" id="editModalTitle">Notiz bearbeiten</h2>
+                <button class="modal-close" id="closeEditModal" aria-label="Schließen">✕</button>
+            </div>
+            <textarea id="editText" aria-label="Text bearbeiten"></textarea>
+            <div class="tags-section">
+                <label>Tags:</label>
+                <div class="tags-input-group">
+                    <input type="text" id="editNewTag" placeholder="Neuer Tag...">
+                    <button class="btn-secondary" id="addEditTagBtn">+ Tag</button>
+                </div>
+                <div class="tag-list" id="editTags"></div>
+            </div>
+            <div class="button-group">
+                <button class="btn-primary" id="saveEditBtn">Speichern</button>
+                <button class="btn-secondary" id="cancelEditBtn">Abbrechen</button>
+            </div>
+            <div class="error" id="editError" role="alert"></div>
+            <div class="success" id="editSuccess" role="status"></div>
+        </div>
+    </div>
+
+    <!-- Batch Summary Modal -->
+    <div class="modal" id="batchSummaryModal" role="dialog" aria-labelledby="batchSummaryTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="section-title" id="batchSummaryTitle">Zusammenfassung mehrerer Notizen</h2>
+                <button class="modal-close" id="closeBatchSummaryModal" aria-label="Schließen">✕</button>
+            </div>
+            <div class="loading show" id="batchSummaryLoading" role="status">KI erstellt Gesamt-Zusammenfassung...</div>
+            <textarea id="batchSummaryText" style="display:none;" aria-label="Gesamt-Zusammenfassung"></textarea>
+            <div class="button-group" id="batchSummaryActions" style="display:none;">
+                <button class="btn-primary" id="saveBatchSummaryBtn">Als neue Notiz speichern</button>
+                <button class="btn-icon" id="copyBatchSummaryBtn">Kopieren</button>
+                <button class="btn-secondary" id="closeBatchSummaryBtn">Schließen</button>
+            </div>
+            <div class="success" id="batchSummarySuccess" role="status"></div>
+        </div>
+    </div>
+    
+    <!-- Confirmation Modal -->
+    <div class="modal" id="confirmModal" role="dialog" aria-labelledby="confirmTitle">
+        <div class="modal-content">
+            <div class="modal-header">
+                <h2 class="section-title" id="confirmTitle">Bestätigung</h2>
+                <button class="modal-close" id="closeConfirmModal" aria-label="Schließen">✕</button>
+            </div>
+            <p id="confirmMessage" style="margin-bottom: 20px;">Sind Sie sicher?</p>
+            <div class="button-group">
+                <button class="btn-primary" id="confirmYesBtn">Ja</button>
+                <button class="btn-secondary" id="confirmNoBtn">Nein</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let recognition;
+        let isRecording = false;
+        let currentTranscript = '';
+        let currentLocation = null;
+        let currentTags = [];
+        let selectionMode = false;
+        let selectedEntries = new Set();
+        let editingEntryId = null;
+        let activeTagFilter = null;
+        let confirmCallback = null;
+
+        const DIARY_KEY = 'diary_entries_v2';
+
+        document.addEventListener('DOMContentLoaded', () => {
+            loadAPIKey();
+            loadEntries();
+            initSpeechRecognition();
+            setupEventListeners();
+        });
+
+        function getEntries() {
+            const stored = localStorage.getItem(DIARY_KEY);
+            let entries = stored ? JSON.parse(stored) : [];
+            entries.sort((a, b) => new Date(b.timestamp) - new Date(a.timestamp));
+            return entries;
+        }
+
+        function saveEntries(entries) {
+            localStorage.setItem(DIARY_KEY, JSON.stringify(entries));
+            loadEntries();
+        }
+
+        function setupEventListeners() {
+            document.getElementById('apiKey').addEventListener('change', saveAPIKey);
+            document.getElementById('apiProvider').addEventListener('change', saveAPIKey);
+            document.getElementById('recordBtn').addEventListener('click', toggleRecording);
+            document.getElementById('summarizeBtn').addEventListener('click', summarize);
+            document.getElementById('cancelBtn').addEventListener('click', cancelTranscript);
+            document.getElementById('saveBtn').addEventListener('click', saveEntry);
+            document.getElementById('editCancelBtn').addEventListener('click', cancelEdit);
+            document.getElementById('locationPermission').addEventListener('change', handleLocationPermission);
+            
+            document.getElementById('addTagBtn').addEventListener('click', addCurrentTag);
+            document.getElementById('newTag').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addCurrentTag();
+            });
+
+            document.getElementById('copyBtn').addEventListener('click', copyToClipboard);
+            document.getElementById('shareBtn').addEventListener('click', shareContent);
+
+            document.getElementById('reformulateShorter').addEventListener('click', () => reformulate('kürzer'));
+            document.getElementById('reformulateFormal').addEventListener('click', () => reformulate('formeller'));
+            document.getElementById('reformulateCasual').addEventListener('click', () => reformulate('lockerer'));
+
+            document.getElementById('toggleSelectionBtn').addEventListener('click', toggleSelectionMode);
+            
+            document.getElementById('summarizeSelectedBtn').addEventListener('click', summarizeSelected);
+            document.getElementById('tagSelectedBtn').addEventListener('click', tagSelected);
+            document.getElementById('exportSelectedBtn').addEventListener('click', exportSelected);
+            document.getElementById('shareSelectedBtn').addEventListener('click', shareSelected);
+            document.getElementById('deleteSelectedBtn').addEventListener('click', deleteSelected);
+
+            document.getElementById('closeEditModal').addEventListener('click', closeEditModal);
+            document.getElementById('cancelEditBtn').addEventListener('click', closeEditModal);
+            document.getElementById('saveEditBtn').addEventListener('click', saveEditedEntry);
+            document.getElementById('addEditTagBtn').addEventListener('click', addEditTag);
+            document.getElementById('editNewTag').addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') addEditTag();
+            });
+
+            document.getElementById('closeBatchSummaryModal').addEventListener('click', closeBatchSummaryModal);
+            document.getElementById('closeBatchSummaryBtn').addEventListener('click', closeBatchSummaryModal);
+            document.getElementById('saveBatchSummaryBtn').addEventListener('click', saveBatchSummary);
+            document.getElementById('copyBatchSummaryBtn').addEventListener('click', copyBatchSummary);
+            
+            document.getElementById('confirmYesBtn').addEventListener('click', () => {
+                if (confirmCallback) {
+                    const cb = confirmCallback;
+                    closeConfirmModal();
+                    cb();
+                } else {
+                    closeConfirmModal();
+                }
+            });
+            document.getElementById('confirmNoBtn').addEventListener('click', closeConfirmModal);
+            document.getElementById('closeConfirmModal').addEventListener('click', closeConfirmModal);
+        }
+
+        function initSpeechRecognition() {
+            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
+            if (!SR) {
+                document.getElementById('recordBtn').disabled = true;
+                showError('Spracherkennung wird in diesem Browser nicht unterstützt.');
+                return;
+            }
+
+            recognition = new SR();
+            recognition.continuous = true;
+            recognition.interimResults = true;
+            recognition.lang = 'de-DE';
+
+            recognition.onresult = (event) => {
+                let interim = '';
+                for (let i = event.resultIndex; i < event.results.length; i++) {
+                    if (event.results[i].isFinal) {
+                        currentTranscript += event.results[i][0].transcript + ' ';
+                    } else {
+                        interim += event.results[i][0].transcript;
+                    }
+                }
+                document.getElementById('transcript').value = currentTranscript + interim;
+            };
+
+            recognition.onerror = (event) => {
+                console.error('Speech recognition error:', event.error);
+                showError('Fehler bei der Spracherkennung: ' + event.error);
+                stopRecording();
+            };
+        }
+
+        function toggleRecording() {
+            if (isRecording) {
+                stopRecording();
+            } else {
+                startRecording();
+            }
+        }
+
+        function startRecording() {
+            currentTranscript = '';
+            document.getElementById('transcript').value = '';
+            document.getElementById('transcriptSection').style.display = 'none';
+            document.getElementById('summarySection').style.display = 'none';
+            
+            recognition.start();
+            isRecording = true;
+            document.getElementById('recordBtn').classList.add('recording');
+            document.getElementById('recordBtn').textContent = '⏹️';
+            document.getElementById('recordBtn').setAttribute('aria-label', 'Aufnahme stoppen');
+            document.getElementById('status').textContent = 'Aufnahme läuft...';
+            
+            if (document.getElementById('locationPermission').checked) {
+                getCurrentLocation();
+            }
+        }
+
+        function stopRecording() {
+            recognition.stop();
+            isRecording = false;
+            document.getElementById('recordBtn').classList.remove('recording');
+            document.getElementById('recordBtn').textContent = '🎤';
+            document.getElementById('recordBtn').setAttribute('aria-label', 'Aufnahme starten');
+            document.getElementById('status').textContent = 'Aufnahme beendet';
+            
+            if (currentTranscript.trim()) {
+                document.getElementById('transcriptSection').style.display = 'block';
+                document.getElementById('transcript').value = currentTranscript.trim();
+            }
+        }
+
+        function getCurrentLocation() {
+            if (navigator.geolocation) {
+                navigator.geolocation.getCurrentPosition(
+                    (position) => {
+                        currentLocation = {
+                            latitude: position.coords.latitude,
+                            longitude: position.coords.longitude
+                        };
+                    },
+                    (error) => {
+                        console.error('Location error:', error);
+                        currentLocation = null;
+                    }
+                );
+            }
+        }
+
+        function handleLocationPermission() {
+            if (document.getElementById('locationPermission').checked) {
+                if (navigator.geolocation) {
+                    navigator.geolocation.getCurrentPosition(
+                        () => console.log('Location permission granted'),
+                        (error) => {
+                            console.error('Location permission denied:', error);
+                            document.getElementById('locationPermission').checked = false;
+                            showError('Standort-Berechtigung wurde verweigert');
+                        }
+                    );
+                }
+            }
+        }
+
+        async function summarize() {
+            const transcript = document.getElementById('transcript').value.trim();
+            if (!transcript) { showError('Keine Transkription vorhanden.'); return; }
+
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            
+            if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
+
+            document.getElementById('loading').classList.add('show');
+            document.getElementById('error').classList.remove('show');
+
+            try {
+                let summary = await callLLMAPI(transcript, apiKey, provider);
+                document.getElementById('summary').value = summary;
+                document.getElementById('summarySection').style.display = 'block';
+                document.getElementById('loading').classList.remove('show');
+                currentTags = [];
+                updateCurrentTags();
+            } catch (error) {
+                showError('Fehler beim Erstellen der Zusammenfassung: ' + error.message);
+                document.getElementById('loading').classList.remove('show');
+            }
+        }
+
+        async function callLLMAPI(text, apiKey, provider) {
+            let url, headers = { 'Content-Type': 'application/json' }, body;
+            const prompt = `Bitte erstelle eine prägnante und gut strukturierte Zusammenfassung des folgenden Textes. Die Zusammenfassung sollte die wichtigsten Punkte erfassen und klar formuliert sein:\n\n${text}`;
+
+            if (provider === 'anthropic') {
+                url = 'https://api.anthropic.com/v1/messages';
+                headers['x-api-key'] = apiKey;
+                headers['anthropic-version'] = '2023-06-01';
+                headers['anthropic-dangerous-direct-browser-access'] = 'true';
+                body = JSON.stringify({
+                    model: 'claude-3-5-sonnet-20241022',
+                    max_tokens: 1024,
+                    messages: [{ role: 'user', content: prompt }]
+                });
+            } else if (provider === 'openai') {
+                url = 'https://api.openai.com/v1/chat/completions';
+                headers['Authorization'] = `Bearer ${apiKey}`;
+                body = JSON.stringify({
+                    model: 'gpt-4o-mini',
+                    messages: [{ role: 'user', content: prompt }],
+                    max_tokens: 500
+                });
+            } else if (provider === 'gemini') {
+                url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash-exp:generateContent?key=${apiKey}`;
+                body = JSON.stringify({
+                    contents: [{ parts: [{ text: prompt }] }]
+                });
+            } else {
+                throw new Error("Unbekannter KI-Anbieter.");
+            }
+
+            const response = await fetch(url, { method: 'POST', headers, body });
+
+            if (!response.ok) {
+                const errorData = await response.json().catch(() => ({}));
+                throw new Error(`API-Fehler: ${response.status} - ${errorData.error?.message || response.statusText}`);
+            }
+
+            const data = await response.json();
+            
+            if (provider === 'anthropic') return data.content[0].text;
+            if (provider === 'openai') return data.choices[0].message.content;
+            if (provider === 'gemini') return data.candidates[0].content.parts[0].text;
+        }
+
+        async function reformulate(style) {
+            const summary = document.getElementById('summary').value.trim();
+            if (!summary) { showError('Keine Zusammenfassung vorhanden.'); return; }
+
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            
+            if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
+
+            document.getElementById('reformulateLoading').classList.add('show');
+            document.getElementById('success').classList.remove('show');
+
+            try {
+                let prompt = '';
+                if (style === 'kürzer') {
+                    prompt = `Formuliere den folgenden Text deutlich kürzer (max. 50% der Originallänge), aber behalte alle wichtigen Informationen:\n\n${summary}`;
+                } else if (style === 'formeller') {
+                    prompt = `Formuliere den folgenden Text formeller und professioneller:\n\n${summary}`;
+                } else if (style === 'lockerer') {
+                    prompt = `Formuliere den folgenden Text lockerer und umgangssprachlicher:\n\n${summary}`;
+                }
+
+                let reformulated = await callLLMAPI(prompt, apiKey, provider);
+                document.getElementById('summary').value = reformulated;
+                document.getElementById('reformulateLoading').classList.remove('show');
+                showSuccess('Erfolgreich neu formuliert!');
+            } catch (error) {
+                showError('Fehler beim Neu-Formulieren: ' + error.message);
+                document.getElementById('reformulateLoading').classList.remove('show');
+            }
+        }
+
+        function addCurrentTag() {
+            const tagInput = document.getElementById('newTag');
+            const tag = tagInput.value.trim();
+            if (tag && !currentTags.includes(tag)) {
+                currentTags.push(tag);
+                updateCurrentTags();
+                tagInput.value = '';
+            }
+        }
+
+        function updateCurrentTags() {
+            const container = document.getElementById('currentTags');
+            container.innerHTML = '';
+            currentTags.forEach(tag => {
+                const wrap = document.createElement('div');
+                wrap.className = 'tag';
+                const txt = document.createElement('span');
+                txt.textContent = tag;
+                const btn = document.createElement('button');
+                btn.className = 'tag-remove';
+                btn.textContent = '×';
+                btn.setAttribute('aria-label', `Tag ${tag} entfernen`);
+                btn.addEventListener('click', () => removeCurrentTag(tag));
+                wrap.appendChild(txt);
+                wrap.appendChild(btn);
+                container.appendChild(wrap);
+            });
+        }
+
+        function removeCurrentTag(tag) {
+            currentTags = currentTags.filter(t => t !== tag);
+            updateCurrentTags();
+        }
+
+        function addEditTag() {
+            const tagInput = document.getElementById('editNewTag');
+            const tag = tagInput.value.trim();
+            if (tag && !currentTags.includes(tag)) {
+                currentTags.push(tag);
+                updateEditTags();
+                tagInput.value = '';
+            }
+        }
+
+        function updateEditTags() {
+            const container = document.getElementById('editTags');
+            container.innerHTML = '';
+            currentTags.forEach(tag => {
+                const wrap = document.createElement('div');
+                wrap.className = 'tag';
+                const txt = document.createElement('span');
+                txt.textContent = tag;
+                const btn = document.createElement('button');
+                btn.className = 'tag-remove';
+                btn.textContent = '×';
+                btn.setAttribute('aria-label', `Tag ${tag} entfernen`);
+                btn.addEventListener('click', () => removeEditTag(tag));
+                wrap.appendChild(txt);
+                wrap.appendChild(btn);
+                container.appendChild(wrap);
+            });
+        }
+
+        function removeEditTag(tag) {
+            currentTags = currentTags.filter(t => t !== tag);
+            updateEditTags();
+        }
+
+        function saveEntry() {
+            const summary = document.getElementById('summary').value.trim();
+            if (!summary) { showError('Keine Zusammenfassung vorhanden.'); return; }
+
+            const entry = {
+                id: Date.now().toString(),
+                text: summary,
+                timestamp: new Date().toISOString(),
+                location: currentLocation || null,
+                tags: [...currentTags],
+                transcript: currentTranscript || ''
+            };
+
+            const entries = getEntries();
+            entries.unshift(entry);
+            saveEntries(entries);
+
+            showSuccess('Notiz gespeichert!');
+            setTimeout(() => { resetForm(); }, 1000);
+        }
+
+        function deleteEntry(id) {
+            showConfirmModal('Eintrag wirklich löschen?', () => {
+                const entries = getEntries().filter(e => e.id !== id);
+                saveEntries(entries);
+                showSuccess('Eintrag gelöscht!');
+            });
+        }
+
+        function editEntry(id) {
+            const entry = getEntries().find(e => e.id === id);
+            if (!entry) return;
+
+            editingEntryId = id;
+            document.getElementById('editText').value = entry.text;
+            document.getElementById('editModal').classList.add('show');
+            document.getElementById('editError').classList.remove('show');
+            document.getElementById('editSuccess').classList.remove('show');
+            
+            currentTags = entry.tags ? [...entry.tags] : [];
+            updateEditTags();
+        }
+
+        function saveEditedEntry() {
+            const text = document.getElementById('editText').value.trim();
+            if (!text) { showError('Text darf nicht leer sein.', 'editError'); return; }
+
+            const entries = getEntries();
+            const entryIndex = entries.findIndex(e => e.id === editingEntryId);
+
+            if (entryIndex > -1) {
+                entries[entryIndex].text = text;
+                entries[entryIndex].tags = [...currentTags];
+                saveEntries(entries);
+                
+                showSuccess('Eintrag aktualisiert!', 'editSuccess');
+                setTimeout(() => closeEditModal(), 1000);
+            }
+        }
+
+        function closeEditModal() {
+            document.getElementById('editModal').classList.remove('show');
+            editingEntryId = null;
+            currentTags = [];
+        }
+
+        async function reformulateEntry(id) {
+            const entry = getEntries().find(e => e.id === id);
+            if (!entry) return;
+
+            const style = prompt('Wie soll neu formuliert werden? (kürzer/formeller/lockerer)');
+            if (!style || !['kürzer', 'formeller', 'lockerer'].includes(style.toLowerCase())) return;
+
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            
+            if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
+
+            showSuccess('Formuliere um...');
+
+            try {
+                let prompt = '';
+                if (style.toLowerCase() === 'kürzer') {
+                    prompt = `Formuliere den folgenden Text deutlich kürzer (max. 50% der Originallänge), aber behalte alle wichtigen Informationen:\n\n${entry.text}`;
+                } else if (style.toLowerCase() === 'formeller') {
+                    prompt = `Formuliere den folgenden Text formeller und professioneller:\n\n${entry.text}`;
+                } else if (style.toLowerCase() === 'lockerer') {
+                    prompt = `Formuliere den folgenden Text lockerer und umgangssprachlicher:\n\n${entry.text}`;
+                }
+
+                let reformulated = await callLLMAPI(prompt, apiKey, provider);
+
+                const entries = getEntries();
+                const entryIndex = entries.findIndex(e => e.id === id);
+                if (entryIndex > -1) {
+                    entries[entryIndex].text = reformulated;
+                    saveEntries(entries);
+                    showSuccess('Erfolgreich neu formuliert!');
+                }
+            } catch (error) {
+                showError('Fehler beim Neu-Formulieren: ' + error.message);
+            }
+        }
+
+        async function copyEntry(id) {
+            const entry = getEntries().find(e => e.id === id);
+            if (!entry) return;
+
+            try {
+                await navigator.clipboard.writeText(entry.text);
+                showSuccess('In Zwischenablage kopiert!');
+            } catch (error) {
+                showError('Fehler beim Kopieren: ' + error.message);
+            }
+        }
+
+        async function shareEntry(id) {
+            const entry = getEntries().find(e => e.id === id);
+            if (!entry) return;
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'Sprach-Tagebuch Notiz', text: entry.text });
+                } catch (error) {
+                    console.log('Sharing cancelled');
+                }
+            } else {
+                showError('Teilen wird in diesem Browser nicht unterstützt.');
+            }
+        }
+
+        function loadEntries() {
+            let entries = getEntries();
+            
+            if (activeTagFilter) {
+                entries = entries.filter(e => e.tags && e.tags.includes(activeTagFilter));
+            }
+
+            renderEntries(entries);
+            updateTagFilter(getEntries());
+        }
+
+        function renderEntries(entries) {
+            const container = document.getElementById('entries');
+            container.innerHTML = '';
+            
+            if (entries.length === 0) {
+                const empty = document.createElement('div');
+                empty.className = 'empty-state';
+                empty.textContent = 'Noch keine Einträge vorhanden.\nNimm deine erste Notiz auf!';
+                container.appendChild(empty);
+                return;
+            }
+
+            entries.forEach(entry => {
+                const entryDiv = document.createElement('div');
+                entryDiv.className = `entry ${selectionMode ? 'selection-mode' : ''}`;
+
+                if (selectionMode) {
+                    const cb = document.createElement('input');
+                    cb.type = 'checkbox';
+                    cb.className = 'entry-checkbox';
+                    cb.checked = selectedEntries.has(entry.id);
+                    cb.setAttribute('aria-label', `Notiz vom ${new Date(entry.timestamp).toLocaleDateString('de-DE')} auswählen`);
+                    cb.addEventListener('change', e => {
+                        if (e.target.checked) selectedEntries.add(entry.id);
+                        else selectedEntries.delete(entry.id);
+                        updateBatchActionsVisibility();
+                    });
+                    entryDiv.appendChild(cb);
+                }
+
+                const header = document.createElement('div');
+                header.className = 'entry-header';
+                const dateDiv = document.createElement('div');
+                const dateEl = document.createElement('div');
+                dateEl.className = 'entry-date';
+                dateEl.textContent = new Date(entry.timestamp).toLocaleDateString('de-DE', {
+                    day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit'
+                });
+                dateDiv.appendChild(dateEl);
+
+                if (entry.location) {
+                    const locEl = document.createElement('div');
+                    locEl.className = 'entry-location';
+                    locEl.textContent = `📍 ${entry.location.latitude.toFixed(4)}, ${entry.location.longitude.toFixed(4)}`;
+                    dateDiv.appendChild(locEl);
+                }
+                header.appendChild(dateDiv);
+                entryDiv.appendChild(header);
+
+                if (entry.tags && entry.tags.length > 0) {
+                    const tagsDiv = document.createElement('div');
+                    tagsDiv.className = 'entry-tags';
+                    entry.tags.forEach(tag => {
+                        const tagEl = document.createElement('div');
+                        tagEl.className = 'tag';
+                        tagEl.textContent = tag;
+                        tagsDiv.appendChild(tagEl);
+                    });
+                    entryDiv.appendChild(tagsDiv);
+                }
+
+                const textEl = document.createElement('div');
+                textEl.className = 'entry-text';
+                textEl.textContent = entry.text;
+                entryDiv.appendChild(textEl);
+
+                const actions = document.createElement('div');
+                actions.className = 'entry-actions';
+                
+                const btnConfigs = [
+                    ['Bearbeiten', 'btn-icon', () => editEntry(entry.id)],
+                    ['Neu formulieren', 'btn-icon', () => reformulateEntry(entry.id)],
+                    ['Kopieren', 'btn-icon', () => copyEntry(entry.id)],
+                    ['Teilen', 'btn-icon', () => shareEntry(entry.id)],
+                    ['Löschen', 'delete-btn', () => deleteEntry(entry.id)]
+                ];
+
+                btnConfigs.forEach(([label, className, handler]) => {
+                    const btn = document.createElement('button');
+                    btn.className = className;
+                    btn.textContent = label;
+                    btn.addEventListener('click', handler);
+                    actions.appendChild(btn);
+                });
+
+                entryDiv.appendChild(actions);
+                container.appendChild(entryDiv);
+            });
+        }
+
+        function updateTagFilter(allEntries) {
+            const allTags = new Set();
+            allEntries.forEach(entry => {
+                if (entry.tags) entry.tags.forEach(tag => allTags.add(tag));
+            });
+
+            const container = document.getElementById('tagFilter');
+            container.innerHTML = '';
+            
+            if (allTags.size === 0 && !activeTagFilter) return;
+
+            const allBtn = document.createElement('div');
+            allBtn.className = `filter-tag ${!activeTagFilter ? 'active' : ''}`;
+            allBtn.textContent = 'Alle';
+            allBtn.addEventListener('click', () => filterByTag(null));
+            container.appendChild(allBtn);
+
+            Array.from(allTags).forEach(tag => {
+                const tagBtn = document.createElement('div');
+                tagBtn.className = `filter-tag ${activeTagFilter === tag ? 'active' : ''}`;
+                tagBtn.textContent = tag;
+                tagBtn.addEventListener('click', () => filterByTag(tag));
+                container.appendChild(tagBtn);
+            });
+        }
+
+        function filterByTag(tag) {
+            activeTagFilter = tag;
+            loadEntries();
+        }
+
+        function toggleSelectionMode() {
+            selectionMode = !selectionMode;
+            selectedEntries.clear();
+            
+            const btn = document.getElementById('toggleSelectionBtn');
+            btn.textContent = selectionMode ? 'Fertig' : 'Auswählen';
+            
+            loadEntries();
+            updateBatchActionsVisibility();
+        }
+
+        function updateBatchActionsVisibility() {
+            const batchActions = document.getElementById('batchActions');
+            if (selectionMode && selectedEntries.size > 0) {
+                batchActions.classList.add('show');
+            } else {
+                batchActions.classList.remove('show');
+            }
+        }
+
+        async function summarizeSelected() {
+            const allEntries = getEntries();
+            const entries = allEntries.filter(e => selectedEntries.has(e.id));
+            if (entries.length === 0) return;
+
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            
+            if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
+
+            document.getElementById('batchSummaryModal').classList.add('show');
+            document.getElementById('batchSummaryText').style.display = 'none';
+            document.getElementById('batchSummaryActions').style.display = 'none';
+            document.getElementById('batchSummaryLoading').classList.add('show');
+            document.getElementById('batchSummarySuccess').classList.remove('show');
+
+            try {
+                const combinedText = entries.map((e, i) => `Notiz ${i + 1} (${new Date(e.timestamp).toLocaleDateString('de-DE')}):\n${e.text}`).join('\n\n---\n\n');
+                
+                const prompt = `Erstelle eine prägnante Gesamt-Zusammenfassung der folgenden ${entries.length} Notizen. Identifiziere gemeinsame Themen und wichtige Erkenntnisse:\n\n${combinedText}`;
+
+                let summary = await callLLMAPI(prompt, apiKey, provider);
+
+                document.getElementById('batchSummaryLoading').classList.remove('show');
+                document.getElementById('batchSummaryText').value = summary;
+                document.getElementById('batchSummaryText').style.display = 'block';
+                document.getElementById('batchSummaryActions').style.display = 'flex';
+            } catch (error) {
+                document.getElementById('batchSummaryLoading').classList.remove('show');
+                showError('Fehler beim Zusammenfassen: ' + error.message, 'batchSummarySuccess');
+            }
+        }
+
+        function saveBatchSummary() {
+            const summary = document.getElementById('batchSummaryText').value.trim();
+            if (!summary) return;
+
+            const entry = {
+                id: Date.now().toString(),
+                text: summary,
+                timestamp: new Date().toISOString(),
+                location: null,
+                tags: ['Zusammenfassung'],
+                transcript: `Zusammenfassung von ${selectedEntries.size} Notizen`
+            };
+
+            const entries = getEntries();
+            entries.unshift(entry);
+            saveEntries(entries);
+
+            showSuccess('Zusammenfassung gespeichert!', 'batchSummarySuccess');
+            setTimeout(() => closeBatchSummaryModal(), 1000);
+        }
+
+        function closeBatchSummaryModal() {
+            document.getElementById('batchSummaryModal').classList.remove('show');
+            document.getElementById('batchSummaryText').value = '';
+            document.getElementById('batchSummaryText').style.display = 'none';
+            document.getElementById('batchSummaryActions').style.display = 'none';
+            document.getElementById('batchSummarySuccess').classList.remove('show');
+            document.getElementById('batchSummaryLoading').classList.add('show');
+        }
+
+        function copyBatchSummary() {
+            const text = document.getElementById('batchSummaryText').value;
+            if (!text) return;
+            navigator.clipboard.writeText(text).then(() => {
+                showSuccess('In Zwischenablage kopiert!', 'batchSummarySuccess');
+            }).catch(() => {
+                showError('Fehler beim Kopieren.', 'batchSummarySuccess');
+            });
+        }
+
+        function deleteSelected() {
+            if (selectedEntries.size === 0) return;
+
+            showConfirmModal(`${selectedEntries.size} Einträge wirklich löschen?`, () => {
+                const entries = getEntries().filter(e => !selectedEntries.has(e.id));
+                saveEntries(entries);
+                
+                selectedEntries.clear();
+                toggleSelectionMode();
+                showSuccess('Ausgewählte Einträge gelöscht!');
+            });
+        }
+
+        function tagSelected() {
+            const tag = prompt('Tag für ausgewählte Einträge:');
+            if (!tag || selectedEntries.size === 0) return;
+
+            const entries = getEntries();
+            let changed = false;
+            entries.forEach(entry => {
+                if (selectedEntries.has(entry.id)) {
+                    if (!entry.tags) entry.tags = [];
+                    if (!entry.tags.includes(tag)) {
+                        entry.tags.push(tag);
+                        changed = true;
+                    }
+                }
+            });
+            
+            if (changed) {
+                saveEntries(entries);
+                showSuccess('Tags hinzugefügt!');
+            }
+        }
+
+        function exportSelected() {
+            const allEntries = getEntries();
+            const entries = allEntries.filter(e => selectedEntries.has(e.id));
+            if (entries.length === 0) return;
+
+            const text = entries.map(e => {
+                const date = new Date(e.timestamp).toLocaleString('de-DE');
+                const tags = e.tags ? `\nTags: ${e.tags.join(', ')}` : '';
+                const location = e.location ? `\nStandort: ${e.location.latitude}, ${e.location.longitude}` : '';
+                return `=== ${date} ===${tags}${location}\n\n${e.text}`;
+            }).join('\n\n' + '='.repeat(50) + '\n\n');
+
+            const blob = new Blob([text], { type: 'text/plain' });
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `notizen_${new Date().toISOString().split('T')[0]}.txt`;
+            a.click();
+            URL.revokeObjectURL(url);
+
+            showSuccess('Exportiert!');
+        }
+
+        async function shareSelected() {
+            const allEntries = getEntries();
+            const entries = allEntries.filter(e => selectedEntries.has(e.id));
+            if (entries.length === 0) return;
+
+            const text = entries.map(e => {
+                const date = new Date(e.timestamp).toLocaleDateString('de-DE');
+                return `${date}:\n${e.text}`;
+            }).join('\n\n---\n\n');
+
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'Meine Notizen', text: text });
+                } catch (error) {
+                    console.log('Sharing cancelled');
+                }
+            } else {
+                showError('Teilen wird in diesem Browser nicht unterstützt.');
+            }
+        }
+
+        function saveAPIKey() {
+            localStorage.setItem('api_key', document.getElementById('apiKey').value);
+            localStorage.setItem('api_provider', document.getElementById('apiProvider').value);
+        }
+
+        function loadAPIKey() {
+            const apiKey = localStorage.getItem('api_key');
+            const provider = localStorage.getItem('api_provider');
+            if (apiKey) document.getElementById('apiKey').value = apiKey;
+            if (provider) document.getElementById('apiProvider').value = provider;
+        }
+
+        function showError(message, targetId = 'error') {
+            const errorEl = document.getElementById(targetId);
+            errorEl.textContent = message;
+            errorEl.classList.add('show');
+            setTimeout(() => errorEl.classList.remove('show'), 5000);
+        }
+
+        function showSuccess(message, targetId = 'success') {
+            const successEl = document.getElementById(targetId);
+            successEl.textContent = message;
+            successEl.classList.add('show');
+            setTimeout(() => successEl.classList.remove('show'), 3000);
+        }
+
+        function showConfirmModal(message, callback) {
+            document.getElementById('confirmMessage').textContent = message;
+            document.getElementById('confirmModal').classList.add('show');
+            confirmCallback = callback;
+        }
+
+        function closeConfirmModal() {
+            document.getElementById('confirmModal').classList.remove('show');
+            confirmCallback = null;
+        }
+
+        async function copyToClipboard() {
+            const text = document.getElementById('summary').value;
+            try {
+                await navigator.clipboard.writeText(text);
+                showSuccess('In Zwischenablage kopiert!');
+            } catch (error) {
+                showError('Fehler beim Kopieren: ' + error.message);
+            }
+        }
+
+        async function shareContent() {
+            const text = document.getElementById('summary').value;
+            if (navigator.share) {
+                try {
+                    await navigator.share({ title: 'Sprach-Tagebuch Notiz', text: text });
+                } catch (error) {
+                    console.log('Sharing cancelled');
+                }
+            } else {
+                showError('Teilen wird in diesem Browser nicht unterstützt.');
+            }
+        }
+
+        function cancelTranscript() { resetForm(); }
+        function cancelEdit() { resetForm(); }
+
+        function resetForm() {
+            currentTranscript = '';
+            currentLocation = null;
+            currentTags = [];
+            document.getElementById('transcript').value = '';
+            document.getElementById('summary').value = '';
+            document.getElementById('newTag').value = '';
+            document.getElementById('transcriptSection').style.display = 'none';
+            document.getElementById('summarySection').style.display = 'none';
+            document.getElementById('status').textContent = 'Bereit zur Aufnahme';
+            updateCurrentTags();
+            document.getElementById('error').classList.remove('show');
+            document.getElementById('success').classList.remove('show');
+        }
+
+        if ('serviceWorker' in navigator) {
+            window.addEventListener('load', () => {
+                navigator.serviceWorker.register('./sw.js')
+                    .then(() => console.log('Service Worker registriert'))
+                    .catch(err => console.log('SW registration failed:', err));
+            });
+        }
+    </script>
+</body>
+</html>
