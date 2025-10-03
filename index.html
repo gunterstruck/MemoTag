@@ -124,6 +124,13 @@
             color: #6B7280;
             margin-top: 10px;
         }
+        
+        /* Neuer Status für laufende KI-Verarbeitung */
+        .processing {
+            color: #4F46E5;
+            font-weight: 600;
+        }
+
 
         .transcript-section, .summary-section {
             background: white;
@@ -635,27 +642,18 @@
             <button class="record-button" id="recordBtn" aria-label="Aufnahme starten">🎤</button>
 
 <div style="margin-top:10px;">
-    <button class="btn-secondary" id="audioBtn" aria-label="Audio aufnehmen oder auswählen">Audio aufnehmen/auswählen</button>
+    <!-- Nur noch ein verstecktes Input-Feld für den Audio-Upload-Fallback -->
     <input type="file" id="audioInput" accept="audio/*" capture="microphone" style="display:none;">
-    <div id="iosHint" class="status" style="display:none;">iOS erkannt: Verwende bitte „Audio aufnehmen/auswählen“ (Live-Spracherkennung wird von Safari nicht unterstützt).</div>
-
-<div style="margin-top:8px;">
-    <button class="btn-secondary" id="pcRecordBtn" aria-label="PC: Direkt aufnehmen">PC: Direkt aufnehmen</button>
-    <span id="pcRecordStatus" class="status" style="margin-left:8px;"></span>
-</div>
-
+    <div id="iosHint" class="status" style="display:none;">Mobile Geräte erkannt: Tippe auf das Mikrofon-Symbol, um die Aufnahme zu starten oder eine Audiodatei auszuwählen.</div>
 </div>
 
             <div class="status" id="status" role="status" aria-live="polite">Bereit zur Aufnahme</div>
         </div>
 
         <div class="transcript-section" id="transcriptSection">
-            <h2 class="section-title">Transkription</h2>
+            <h2 class="section-title">Transkription (Wird automatisch verarbeitet...)</h2>
             <textarea id="transcript" readonly aria-label="Transkribierter Text"></textarea>
-            <div class="button-group">
-                <button class="btn-primary" id="summarizeBtn">Zusammenfassen</button>
-                <button class="btn-secondary" id="cancelBtn">Abbrechen</button>
-            </div>
+            <!-- Buttons entfernt, da der Prozess jetzt automatisch in die Zusammenfassung übergeht -->
             <div class="loading" id="loading" role="status">KI erstellt Zusammenfassung...</div>
             <div class="error" id="error" role="alert"></div>
         </div>
@@ -779,7 +777,10 @@
     </div>
 
     <script>
-        let recognition;
+        // MediaRecorder State
+        let __mr, __mrStream, __mrChunks = [], __mrRecording = false;
+
+        let recognition; // recognition bleibt, aber wird nicht mehr primär genutzt
         let isRecording = false;
         let currentTranscript = '';
         let currentLocation = null;
@@ -795,14 +796,13 @@
         document.addEventListener('DOMContentLoaded', () => {
             loadAPIKey();
             loadEntries();
-            initSpeechRecognition();
+            // initSpeechRecognition(); // Entfernt, da Live-SR wegfällt
             setupEventListeners();
-            // Tags beim Start aktualisieren
             updateAvailableTags(); 
             
-            // *NEU: Hier Initialisierungs-Funktionen aufrufen*
-            initIOSFallback();
+            // Wichtiger Aufruf, um die MediaRecorder-Logik zu initialisieren
             initMediaRecorderFallback();
+            initIOSFallback(); // Behält das Audio-Upload-Handling
         });
 
         function getEntries() {
@@ -822,10 +822,13 @@
             document.getElementById('apiKey').addEventListener('change', saveAPIKey);
             document.getElementById('apiProvider').addEventListener('change', saveAPIKey);
             document.getElementById('recordBtn').addEventListener('click', toggleRecording);
-            document.getElementById('summarizeBtn').addEventListener('click', summarize);
-            document.getElementById('cancelBtn').addEventListener('click', cancelTranscript);
+            
+            // Diese Buttons wurden aus der UI entfernt und ihre Logik automatisiert:
+            // document.getElementById('summarizeBtn').addEventListener('click', summarize); 
+            // document.getElementById('cancelBtn').addEventListener('click', cancelTranscript);
+
             document.getElementById('saveBtn').addEventListener('click', saveEntry);
-            document.getElementById('editCancelBtn').addEventListener('click', cancelEdit);
+            document.getElementById('editCancelBtn').addEventListener('click', resetForm); // Zurücksetzen, nicht nur Abbrechen
             document.getElementById('locationPermission').addEventListener('change', handleLocationPermission);
             
             document.getElementById('addTagBtn').addEventListener('click', addCurrentTag);
@@ -872,52 +875,247 @@
             });
             document.getElementById('confirmNoBtn').addEventListener('click', closeConfirmModal);
             document.getElementById('closeConfirmModal').addEventListener('click', closeConfirmModal);
+
+            // Audio Input Listener muss hier bleiben, da er Fallback für Mobile ist
+            const audioInput = document.getElementById('audioInput');
+            audioInput.addEventListener('change', handleAudioFileSelection);
         }
 
-        function initSpeechRecognition() {
-            const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-            if (!SR) {
-                document.getElementById('recordBtn').disabled = true;
-                // showError('Spracherkennung wird in diesem Browser nicht unterstützt.'); // Nur über Diagnose anzeigen
+        // Dummy-Funktion für SpeechRecognition (wird nicht mehr genutzt, aber zur Sicherheit behalten)
+        function initSpeechRecognition() {} 
+
+        // NEU: Zentrale Umschaltfunktion für die Aufnahme
+        function toggleRecording() {
+            const hasMediaRecorder = !!(navigator.mediaDevices && window.MediaRecorder);
+
+            if (isRecording) {
+                // Aufnahme stoppen (MediaRecorder)
+                if (hasMediaRecorder && __mrRecording) {
+                    stopMediaRecorder();
+                }
+                // Wenn MediaRecorder nicht aktiv, aber isRecording true (Sicherheits-Reset)
+                else {
+                    resetForm();
+                }
+
+            } else {
+                resetForm();
+                // Wenn MediaRecorder verfügbar (PC/Android), starte MediaRecorder
+                if (hasMediaRecorder) {
+                    startMediaRecorder();
+                } 
+                // Wenn MediaRecorder NICHT verfügbar (z.B. iOS Safari), nutze den Audio-Upload-Fallback
+                else {
+                    // Startet den nativen Dialog zur Aufnahme/Auswahl
+                    const audioInput = document.getElementById('audioInput');
+                    if (audioInput) {
+                        try {
+                            // Diagnose-Log hinzufügen
+                            if(window.__memotag?.diag) __memotag.diag.diagLog('Klick: Mobile Fallback (Audio Upload)'); 
+                            audioInput.click();
+                        } catch (e) {
+                            showError('Mikrofonzugriff nicht möglich. Bitte Audio direkt hochladen.');
+                        }
+                    }
+                }
+            }
+        }
+        
+        // NEU: MediaRecorder Start/Stop Logik
+        async function startMediaRecorder() {
+            try{
+                const btn = document.getElementById('recordBtn');
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                __mrStream = stream;
+                
+                // Wähle den besten MIME-Type
+                const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
+                             (MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 
+                             (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''));
+
+                if (!mime) {
+                    showError('Ihr Browser unterstützt keine MediaRecorder-Formate für Audio.');
+                    stopStream(__mrStream);
+                    return;
+                }
+
+                __mr = new MediaRecorder(stream, { mimeType: mime });
+                __mrChunks = [];
+                __mr.ondataavailable = e => { 
+                    if(e.data && e.data.size > 0) {
+                        __mrChunks.push(e.data); 
+                        try { if(window.__memotag?.diag) __memotag.diag.diagLog(`Recorder: Chunk (${e.data.size} Bytes)`); } catch(_) {}
+                    }
+                };
+                
+                __mr.onerror = (e) => {
+                    showError('Aufnahmefehler: ' + e.error.name);
+                    try { if(window.__memotag?.diag) __memotag.diag.diagError('MediaRecorder Fehler: ' + e.error.name); } catch(_) {}
+                    stopStream(__mrStream);
+                    __mrRecording = false;
+                    isRecording = false;
+                    updateRecordButton('Fehler.');
+                };
+
+                __mr.onstop = processAudioRecording;
+
+                __mr.start(500); 
+                __mrRecording = true;
+                isRecording = true;
+                updateRecordButton('Aufnahme läuft...');
+                
+                if (document.getElementById('locationPermission')?.checked) {
+                    getCurrentLocation();
+                }
+
+                try { if(window.__memotag?.diag) __memotag.diag.diagLog('Recorder gestartet: ' + mime); } catch(_) {}
+
+            }catch(err){
+                const errMsg = err.name === 'NotAllowedError' ? 'Mikrofonzugriff verweigert.' : (err.message || err);
+                showError('Zugriff auf Mikrofon fehlgeschlagen: ' + errMsg);
+                try { if(window.__memotag?.diag) window.__memotag.diag.diagError('Mic-Zugriff Fehler: ' + errMsg); } catch(_) {}
+                updateRecordButton('Bereit zur Aufnahme');
+            }
+        }
+        
+        function stopMediaRecorder() {
+            try{ 
+                __mr.stop(); 
+                try { if(window.__memotag?.diag) __memotag.diag.diagLog('Recorder Stopp-Kommando gesendet. Warte auf onstop Event...'); } catch(_) {}
+                updateRecordButton('Verarbeite...');
+            }catch(_){}
+            stopStream(__mrStream);
+            isRecording = false;
+        }
+
+        async function processAudioRecording() {
+            try{
+                const btn = document.getElementById('recordBtn');
+                const blobType = __mr && __mr.mimeType ? __mr.mimeType : 'audio/webm';
+                const blob = new Blob(__mrChunks, { type: blobType });
+                const file = new File([blob], 'aufnahme.' + (blobType.includes('ogg') ? 'ogg' : 'webm'), { type: blobType });
+                
+                try { if(window.__memotag?.diag) __memotag.diag.diagLog(`Recorder Stopp: Datei (${file.name}) bereit. Größe: ${(file.size / 1024 / 1024).toFixed(2)} MB`); } catch(_) {}
+
+                await processAudioFile(file);
+
+            }catch(err){
+                const errorMessage = 'Verarbeitung fehlgeschlagen: ' + (err.message || err);
+                showError(errorMessage);
+                try { if(window.__memotag?.diag) window.__memotag.diag.diagError(errorMessage); } catch(_) {}
+                resetForm();
+            } finally {
+                __mrRecording = false;
+            }
+        }
+        
+        // NEU: Allgemeine Funktion zum Verarbeiten der Audio-Datei (Upload oder MediaRecorder)
+        async function processAudioFile(file) {
+             // 1. Transkription starten
+            document.getElementById('status').textContent = 'Audio-Datei gesendet. Warte auf KI-Transkription...';
+            document.getElementById('status').classList.add('processing');
+            
+            const apiKey = document.getElementById('apiKey').value.trim();
+            const provider = document.getElementById('apiProvider').value;
+            if(!apiKey){ 
+                showError('Bitte gib einen API-Schlüssel ein.'); 
+                resetForm();
+                return; 
+            }
+            
+            let transcript;
+            try {
+                transcript = await transcribeAudio(file, apiKey, provider);
+                currentTranscript = transcript || '';
+                
+                try { if(window.__memotag?.diag) __memotag.diag.diagLog('Transkription erfolgreich abgeschlossen.'); } catch(_) {}
+
+                const t = document.getElementById('transcript');
+                if (t) t.value = currentTranscript;
+                const ts = document.getElementById('transcriptSection');
+                if (ts) ts.classList.add('show');
+
+            } catch(err) {
+                 const errorMessage = 'Transkription fehlgeschlagen: ' + (err.message || err);
+                showError(errorMessage);
+                try { if(window.__memotag?.diag) window.__memotag.diag.diagError(errorMessage); } catch(_) {}
+                resetForm();
                 return;
             }
 
-            recognition = new SR();
-            recognition.continuous = true;
-            recognition.interimResults = true;
-            recognition.lang = 'de-DE';
-
-            recognition.onresult = (event) => {
-                let interim = '';
-                let final = '';
-                for (let i = event.resultIndex; i < event.results.length; i++) {
-                    if (event.results[i].isFinal) {
-                        final += event.results[i][0].transcript + ' ';
-                    } else {
-                        interim += event.results[i][0].transcript;
-                    }
-                }
-                currentTranscript += final;
-                document.getElementById('transcript').value = currentTranscript.trim() + ' ' + interim.trim();
-                document.getElementById('transcriptSection').classList.add('show');
-            };
-
-            recognition.onerror = (event) => {
-                console.error('Speech recognition error:', event.error);
-                // showError('Fehler bei der Spracherkennung: ' + event.error); // Diagnose hookt ein
-                stopRecording();
-            };
+            // 2. Transkription fertig - Automatische Zusammenfassung starten
+            document.getElementById('status').textContent = 'Transkription abgeschlossen. Erstelle Zusammenfassung...';
+            await summarize(currentTranscript);
+            document.getElementById('status').classList.remove('processing');
         }
 
-        function toggleRecording() {
-            if (isRecording) {
-                stopRecording();
-            } else {
-                startRecording();
+
+        // NEU: Transkriptions-Logik für Upload-Fallback
+        async function handleAudioFileSelection(e) {
+            const file = e.target.files && e.target.files[0];
+            if (!file) return;
+
+            try { if(window.__memotag?.diag) __memotag.diag.diagLog('Audio-Datei ausgewählt (' + file.name + ')'); } catch(_) {}
+
+            await processAudioFile(file);
+
+        }
+
+        // HILFSFUNKTION: MediaRecorder Fallback Logik (Initialisierung)
+        function initMediaRecorderFallback(){
+             try { if(window.__memotag?.diag) window.__memotag.diag.diagLog('Init: MediaRecorder Fallback'); } catch(_) {}
+            // Der Haupt-Button-Click-Handler ist jetzt toggleRecording
+        }
+
+        // HILFSFUNKTION: iOS Fallback Logik (Initialisierung)
+        function initIOSFallback() {
+             try { if(window.__memotag?.diag) window.__memotag.diag.diagLog('Init: iOS Fallback (Status-Hinweis)'); } catch(_) {}
+            // Zeige Hinweis für mobile Geräte
+            const iosHint = document.getElementById('iosHint');
+            if (iosHint) {
+                // Wir nutzen die Tatsache aus, dass MediaRecorder auf iOS Safari nicht geht
+                const hasMediaRecorder = !!(navigator.mediaDevices && window.MediaRecorder);
+                if (!hasMediaRecorder) {
+                    iosHint.style.display = 'block';
+                }
             }
         }
+        
+        function stopStream(stream){ 
+            try{ if(stream) stream.getTracks().forEach(t=>t.stop()); }catch(_){} 
+        }
+        
+        function updateRecordButton(statusText) {
+            const btn = document.getElementById('recordBtn');
+            const status = document.getElementById('status');
 
-        // startRecording und stopRecording wurden durch das Override-Skript ersetzt
+            if (status) status.textContent = statusText;
+
+            if (statusText.includes('Aufnahme läuft')) {
+                if (btn) {
+                    btn.classList.add('recording');
+                    btn.textContent = '⏹️';
+                    btn.setAttribute('aria-label', 'Aufnahme stoppen');
+                }
+            } else {
+                 if (btn) {
+                    btn.classList.remove('recording');
+                    btn.textContent = '🎤';
+                    btn.setAttribute('aria-label', 'Aufnahme starten');
+                }
+            }
+
+            if (statusText.includes('Warte auf KI') || statusText.includes('Erstelle Zusammenfassung') || statusText.includes('Verarbeite')) {
+                 if (status) status.classList.add('processing');
+                 if (btn) btn.disabled = true;
+
+            } else {
+                 if (status) status.classList.remove('processing');
+                 if (btn) btn.disabled = false;
+            }
+
+        }
+
 
         function getCurrentLocation() {
             if (navigator.geolocation) {
@@ -951,28 +1149,41 @@
             }
         }
 
-        async function summarize() {
-            const transcript = document.getElementById('transcript').value.trim();
-            if (!transcript) { showError('Keine Transkription vorhanden.'); return; }
+        // NEU: Summarize-Funktion nimmt jetzt Transkript als Argument und wird automatisch aufgerufen
+        async function summarize(transcript) {
+            if (!transcript) { 
+                showError('Keine Transkription vorhanden, kann nicht zusammenfassen.'); 
+                resetForm();
+                return; 
+            }
 
             const apiKey = document.getElementById('apiKey').value.trim();
             const provider = document.getElementById('apiProvider').value;
             
-            if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
+            if (!apiKey) { 
+                showError('Bitte gib einen API-Schlüssel ein.'); 
+                resetForm();
+                return; 
+            }
 
             document.getElementById('loading').classList.add('show');
             document.getElementById('error').classList.remove('show');
+            document.getElementById('summarySection').classList.add('show');
 
             try {
                 let summary = await callLLMAPI(transcript, apiKey, provider);
                 document.getElementById('summary').value = summary;
-                document.getElementById('summarySection').classList.add('show');
                 document.getElementById('loading').classList.remove('show');
+                
+                // setze Status zurück, damit der Button wieder klickbar ist
+                updateRecordButton('Zusammenfassung fertig!');
+                
                 currentTags = [];
                 updateCurrentTags();
             } catch (error) {
                 showError('Fehler beim Erstellen der Zusammenfassung: ' + error.message);
                 document.getElementById('loading').classList.remove('show');
+                resetForm();
             }
         }
 
@@ -1622,9 +1833,6 @@
             }
         }
 
-        function cancelTranscript() { resetForm(); }
-        function cancelEdit() { resetForm(); }
-
         function resetForm() {
             currentTranscript = '';
             currentLocation = null;
@@ -1634,7 +1842,10 @@
             document.getElementById('newTag').value = '';
             document.getElementById('transcriptSection').classList.remove('show');
             document.getElementById('summarySection').classList.remove('show');
-            document.getElementById('status').textContent = 'Bereit zur Aufnahme';
+            
+            // Setze den Status zurück
+            updateRecordButton('Bereit zur Aufnahme');
+            
             updateCurrentTags();
             document.getElementById('error').classList.remove('show');
             document.getElementById('success').classList.remove('show');
@@ -1929,91 +2140,11 @@ navigator.serviceWorker.addEventListener('controllerchange', () => {
 
 
 <script id="override-start-stop">
-// --- Override start/stop to wire diagnostics and robust restart ---
-function startRecording() {
-  // Reset transcript UI
-  currentTranscript = '';
-  const t = document.getElementById('transcript');
-  if (t) t.value = '';
-  const ts = document.getElementById('transcriptSection');
-  const ss = document.getElementById('summarySection');
-  if (ts) ts.classList.add('show');
-  if (ss) ss.classList.remove('show');
-
-  // Diagnostics
-  try {
-    if (window.__memotag && window.__memotag.diag) {
-      __memotag.diag.diagSetState('startet…', 'state-warn');
-      __memotag.diag.startMicMeter();
-      __memotag.diag.diagLog('Start-Button');
-    }
-  } catch(_) {}
-
-  // Robust: abort any previous and re-init fresh
-  try { if (recognition && recognition.abort) recognition.abort(); } catch(e){}
-  try { initSpeechRecognition(); } catch(e){}
-
-  setTimeout(() => {
-    try { recognition.start(); } catch (e) {
-      try { diagError && diagError('Recognition Start Error: ' + e.message); } catch(_) {}
-      showError('Aufnahme konnte nicht gestartet werden. Prüfe die Mikrofon-Berechtigung.');
-      return;
-    }
-    isRecording = true;
-    const btn = document.getElementById('recordBtn');
-    if (btn) {
-      btn.classList.add('recording');
-      btn.textContent = '⏹️';
-      btn.setAttribute('aria-label', 'Aufnahme stoppen');
-    }
-    const status = document.getElementById('status');
-    if (status) status.textContent = 'Aufnahme läuft...';
-
-    if (document.getElementById('locationPermission')?.checked) {
-      getCurrentLocation && getCurrentLocation();
-    }
-
-    // Safety timeout
-    clearTimeout(window.__recTimeout);
-    window.__recTimeout = setTimeout(() => { try { stopRecording(); } catch(e){} }, 90 * 1000);
-  }, 60);
-}
-
-function stopRecording() {
-  clearTimeout(window.__recTimeout);
-  try { recognition && recognition.stop && recognition.stop(); } catch(e){}
-  try { recognition && recognition.abort && recognition.abort(); } catch(e){}
-  isRecording = false;
-
-  // Diagnostics
-  try {
-    if (window.__memotag && window.__memotag.diag) {
-      __memotag.diag.diagLog('Stop-Button');
-      __memotag.diag.stopMicMeter();
-      __memotag.diag.diagSetState('beendet', 'state-warn');
-    }
-  } catch(_) {}
-
-  const btn = document.getElementById('recordBtn');
-  if (btn) {
-    btn.classList.remove('recording');
-    btn.textContent = '🎤';
-    btn.setAttribute('aria-label', 'Aufnahme starten');
-  }
-  const status = document.getElementById('status');
-  if (status) status.textContent = 'Aufnahme beendet';
-
-  const txt = (currentTranscript || '').trim();
-  if (txt) {
-    const ts = document.getElementById('transcriptSection');
-    if (ts) ts.classList.add('show');
-    const t = document.getElementById('transcript');
-    if (t) t.value = txt;
-  } else {
-    const ts = document.getElementById('transcriptSection');
-    if (ts) ts.classList.remove('show');
-  }
-}
+// --- Override start/stop for Mic-Meter (wird jetzt nur von MediaRecorder benutzt) ---
+// Die Logik in dieser Sektion wurde in die main-script Blöcke verschoben, um sie zu vereinfachen.
+// Die ursprünglichen Funktionen 'startRecording' und 'stopRecording' im Haupt-Script wurden 
+// durch die neuen MediaRecorder-Funktionen ersetzt. Diese Sektion wird nun entfernt, um 
+// Redundanz zu vermeiden.
 </script>
 
 <script>
@@ -2039,56 +2170,15 @@ function isIOS() {
 
 function initIOSFallback() {
     // Diagnose-Log hinzufügen, um zu sehen, ob die Funktion aufgerufen wird
-    try { if(window.__memotag?.diag) __memotag.diag.diagLog('Init: iOS Fallback (Audio Upload)'); } catch(_) {}
-
-    const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
-    const onIOS = isIOS();
-    const hasSR = !!SR;
+    try { if(window.__memotag?.diag) __memotag.diag.diagLog('Init: iOS Fallback (Status-Hinweis)'); } catch(_) {}
+    // Zeige Hinweis für mobile Geräte
     const iosHint = document.getElementById('iosHint');
-    if (onIOS) {
-        if (iosHint) iosHint.style.display = 'block';
-    }
-    if (!hasSR || onIOS) {
-        const btn = document.getElementById('recordBtn');
-        if (btn) {
-            btn.disabled = true;
-            btn.title = onIOS ? 'Live-Spracherkennung wird auf iOS nicht unterstützt' : 'Spracherkennung in diesem Browser nicht verfügbar';
+    if (iosHint) {
+        // Wir nutzen die Tatsache aus, dass MediaRecorder auf iOS Safari nicht geht
+        const hasMediaRecorder = !!(navigator.mediaDevices && window.MediaRecorder);
+        if (!hasMediaRecorder) {
+            iosHint.style.display = 'block';
         }
-    }
-    const audioBtn = document.getElementById('audioBtn');
-    const audioInput = document.getElementById('audioInput');
-    if (audioBtn && audioInput) {
-        audioBtn.addEventListener('click', () => {
-             // Diagnose-Log hinzufügen
-             try { if(window.__memotag?.diag) __memotag.diag.diagLog('Klick: Audio aufnehmen/auswählen'); } catch(_) {}
-             audioInput.click();
-        });
-        audioInput.addEventListener('change', async (e) => {
-            const file = e.target.files && e.target.files[0];
-            if (!file) return;
-            // Diagnose-Log hinzufügen
-            try { if(window.__memotag?.diag) __memotag.diag.diagLog('Audio-Datei ausgewählt (' + file.name + ')'); } catch(_) {}
-
-            try {
-                document.getElementById('status').textContent = 'Audio wird transkribiert...';
-                const apiKey = document.getElementById('apiKey').value.trim();
-                const provider = document.getElementById('apiProvider').value;
-                if (!apiKey) { showError('Bitte gib einen API-Schlüssel ein.'); return; }
-                const text = await transcribeAudio(file, apiKey, provider);
-                currentTranscript = text || '';
-                const t = document.getElementById('transcript');
-                if (t) t.value = currentTranscript;
-                const ts = document.getElementById('transcriptSection');
-                if (ts) ts.classList.add('show');
-                document.getElementById('status').textContent = 'Transkription abgeschlossen';
-            } catch (err) {
-                showError('Transkription fehlgeschlagen: ' + (err.message || err));
-                document.getElementById('status').textContent = 'Bereit zur Aufnahme';
-            } finally {
-                // reset input so same file can be reselected
-                audioInput.value = '';
-            }
-        });
     }
 }
 
@@ -2225,129 +2315,14 @@ async function transcribeAudio(file, apiKey, provider) {
 <script>
 
 // ---- MediaRecorder Fallback (Desktop): Direktaufnahme am PC ----
-let __mr, __mrStream, __mrChunks = [], __mrRecording = false;
-
-function setPcRecStatus(txt){ const s=document.getElementById('pcRecordStatus'); if(s) s.textContent = txt || ''; }
+// Entfernte die Deklaration von __mr, __mrStream, __mrChunks, __mrRecording, da sie im Hauptskript deklariert sind.
 function stopStream(stream){ try{ if(stream) stream.getTracks().forEach(t=>t.stop()); }catch(_){} }
 
 function initMediaRecorderFallback(){
     // Diagnose-Log hinzufügen, um zu sehen, ob die Funktion aufgerufen wird
-    try { if(window.__memotag?.diag) __memotag.diag.diagLog('Init: MediaRecorder Fallback (PC Aufnahme)'); } catch(_) {}
+    try { if(window.__memotag?.diag) window.__memotag.diag.diagLog('Init: MediaRecorder Fallback (PC Aufnahme)'); } catch(_) {}
 
-    const btn = document.getElementById('pcRecordBtn');
-    if(!btn) return;
-    const supported = !!(navigator.mediaDevices && window.MediaRecorder);
-    // Auf iOS ausblenden (wir verwenden dort den nativen Aufnahme-Dialog via <input capture>)
-    if(!supported || isIOS()){
-        if (btn) btn.style.display = 'none'; // Wenn der Browser es nicht kann oder es iOS ist, ausblenden.
-        return;
-    }
-    btn.addEventListener('click', async () => {
-        // Diagnose-Log hinzufügen
-        try { if(window.__memotag?.diag) __memotag.diag.diagLog('Klick: PC Direkt aufnehmen'); } catch(_) {}
-
-        if(!__mrRecording){
-            try{
-                // Erfrage Mikrofon-Berechtigung
-                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-                __mrStream = stream;
-                
-                // Wähle den besten MIME-Type
-                const mime = MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' :
-                             (MediaRecorder.isTypeSupported('audio/ogg') ? 'audio/ogg' : 
-                             (MediaRecorder.isTypeSupported('audio/mp4') ? 'audio/mp4' : ''));
-
-                if (!mime) {
-                    showError('Ihr Browser unterstützt keine MediaRecorder-Formate für Audio.');
-                    stopStream(__mrStream);
-                    return;
-                }
-
-                __mr = new MediaRecorder(stream, { mimeType: mime });
-                __mrChunks = [];
-                __mr.ondataavailable = e => { 
-                    if(e.data && e.data.size > 0) {
-                        __mrChunks.push(e.data); 
-                        try { if(window.__memotag?.diag) __memotag.diag.diagLog(`Recorder: Chunk (${e.data.size} Bytes)`); } catch(_) {}
-                    }
-                };
-                
-                __mr.onerror = (e) => {
-                    showError('Aufnahmefehler: ' + e.error.name);
-                    try { if(window.__memotag?.diag) __memotag.diag.diagError('MediaRecorder Fehler: ' + e.error.name); } catch(_) {}
-                    stopStream(__mrStream);
-                    __mrRecording = false;
-                    if(btn){ btn.textContent = 'PC: Direkt aufnehmen'; }
-                    setPcRecStatus('Fehler.');
-                };
-
-                __mr.onstop = async () => {
-                    try{
-                        stopStream(__mrStream);
-                        const blobType = __mr && __mr.mimeType ? __mr.mimeType : 'audio/webm';
-                        const blob = new Blob(__mrChunks, { type: blobType });
-                        const file = new File([blob], 'aufnahme.' + (blobType.includes('ogg') ? 'ogg' : 'webm'), { type: blobType });
-                        
-                        try { if(window.__memotag?.diag) __memotag.diag.diagLog(`Recorder Stopp: Datei (${file.name}) bereit. Größe: ${(file.size / 1024 / 1024).toFixed(2)} MB`); } catch(_) {}
-
-                        // NEU: Zusätzliche Statusmeldung vor dem Senden an KI
-                        document.getElementById('status').textContent = 'Audio-Datei gesendet. Warte auf KI-Transkription...';
-                        setPcRecStatus('Sende an KI...'); // Zeige Status direkt am Knopf
-
-                        const apiKey = document.getElementById('apiKey').value.trim();
-                        const provider = document.getElementById('apiProvider').value;
-                        if(!apiKey){ 
-                            showError('Bitte gib einen API-Schlüssel ein.'); 
-                            document.getElementById('status').textContent = 'Bereit zur Aufnahme';
-                            return; 
-                        }
-                        const txt = await transcribeAudio(file, apiKey, provider);
-                        currentTranscript = txt || '';
-                        
-                        // NEU: Logs für erfolgreichen Abschluss
-                        try { if(window.__memotag?.diag) __memotag.diag.diagLog('Transkription erfolgreich abgeschlossen.'); } catch(_) {}
-
-                        const t = document.getElementById('transcript'); if(t) t.value = currentTranscript;
-                        const ts = document.getElementById('transcriptSection'); if(ts) ts.classList.add('show');
-                        document.getElementById('status').textContent = 'Transkription abgeschlossen';
-                        setPcRecStatus('Fertig!');
-
-                    }catch(err){
-                        // NEU: Bessere Fehlerbehandlung für KI-Transkription
-                        const errorMessage = 'Transkription fehlgeschlagen: ' + (err.message || err);
-                        showError(errorMessage);
-                        try { if(window.__memotag?.diag) __memotag.diag.diagError(errorMessage); } catch(_) {}
-                        document.getElementById('status').textContent = 'Bereit zur Aufnahme';
-                        setPcRecStatus('Fehler.');
-                    } finally {
-                        __mrRecording = false;
-                        if(btn){ btn.textContent = 'PC: Direkt aufnehmen'; }
-                        // setPcRecStatus wird bereits in den catch/success Blöcken gesetzt
-                    }
-                };
-
-                __mr.start(500); // sammle alle 500ms Chunks
-                __mrRecording = true;
-                btn.textContent = 'Stopp (PC-Aufnahme)';
-                setPcRecStatus('Aufnahme läuft…');
-                try { if(window.__memotag?.diag) __memotag.diag.diagLog('Recorder gestartet: ' + mime); } catch(_) {}
-
-            }catch(err){
-                // Dies fängt Fehler bei der Berechtigungsanfrage ab (z.B. "NotAllowedError")
-                const errMsg = err.name === 'NotAllowedError' ? 'Mikrofonzugriff verweigert.' : (err.message || err);
-                showError('Zugriff auf Mikrofon fehlgeschlagen: ' + errMsg);
-                try { if(window.__memotag?.diag) __memotag.diag.diagError('Mic-Zugriff Fehler: ' + errMsg); } catch(_) {}
-            }
-        } else {
-            // Stopp-Logik
-            try{ 
-                __mr.stop(); 
-                try { if(window.__memotag?.diag) __memotag.diag.diagLog('Recorder Stopp-Kommando gesendet. Warte auf onstop Event...'); } catch(_) {}
-                setPcRecStatus('Verarbeite...');
-            }catch(_){}
-            stopStream(__mrStream);
-        }
-    });
+    // Die Logik für den Klick wird jetzt direkt in toggleRecording behandelt
 }
 
 // Hook in nach DOMContentLoaded (wurde in main-script verschoben)
