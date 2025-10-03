@@ -899,7 +899,7 @@
         const DIARY_KEY = 'diary_entries_v2';
 
         document.addEventListener('DOMContentLoaded', () => {
-            loadAPIKey();
+            loadAPIKey(); // <--- Neu positioniert
             loadEntries();
             // initSpeechRecognition(); // Entfernt, da Live-SR wegfällt
             setupEventListeners();
@@ -911,9 +911,6 @@
             
             // NEU: NFC Button nur zeigen, wenn API da ist
             updateNFCButton();
-
-            // NEU: API Setup beim Start verbergen/zeigen
-            checkAndSetApiSetupState();
 
             // NEU: Diagnose beim Start einklappen
             document.getElementById('diagnostics').classList.add('collapsed');
@@ -949,14 +946,21 @@
         
         // NEU: Prüft beim Laden, ob API-Schlüssel vorhanden und passt den Zustand an
         function checkAndSetApiSetupState() {
-            const apiKey = localStorage.getItem('api_key');
-            // NEU: Wenn API Key hinterlegt ist, starten wir collapsed
-            if (apiKey && apiKey.trim().length > 0) {
+            const apiKey = document.getElementById('apiKey').value.trim(); // <-- Liest den aktuellen (wiederhergestellten) Wert
+            const setupEl = document.getElementById('apiSetup');
+            const headerEl = document.getElementById('header');
+
+            // NEU: Wenn API Key hinterlegt ist, starten wir collapsed.
+            // Der Wert ist hier garantiert aus localStorage/Browser-Autofill geladen.
+            if (apiKey && apiKey.length > 0) {
                 isApiSetupExpanded = false; 
+                setupEl.classList.add('collapsed');
+                headerEl.classList.remove('expanded');
             } else {
                 isApiSetupExpanded = true; // Start expanded
+                setupEl.classList.remove('collapsed');
+                headerEl.classList.add('expanded');
             }
-            toggleApiSetup(); // Führt die initiale Zustandsänderung durch
         }
         
         // NEU: Logik zum Ein-/Ausklappen der Diagnose
@@ -2091,6 +2095,9 @@
             const provider = localStorage.getItem('api_provider');
             if (apiKey) document.getElementById('apiKey').value = apiKey;
             if (provider) document.getElementById('apiProvider').value = provider;
+            
+            // WICHTIG: API Setup Zustand erst NACHDEM die Werte geladen sind prüfen!
+            checkAndSetApiSetupState();
         }
 
         function showError(message, targetId = 'error') {
