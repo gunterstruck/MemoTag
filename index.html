@@ -131,7 +131,17 @@
             padding: 20px;
             margin-bottom: 20px;
             box-shadow: 0 10px 30px rgba(0,0,0,0.2);
-            display: none;
+            opacity: 0;
+            height: 0;
+            overflow: hidden;
+            transition: opacity 0.5s ease-in-out, height 0.5s ease-in-out;
+            pointer-events: none;
+        }
+
+        .transcript-section.show, .summary-section.show {
+            opacity: 1;
+            height: auto;
+            pointer-events: all;
         }
 
         .section-title {
@@ -552,7 +562,6 @@
   #diag-log { max-height: 140px; overflow:auto; font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace; font-size:12px; background:#fafafa; border:1px solid #eee; border-radius:8px; padding:8px; }
   #diag-log .line { padding:2px 0; border-bottom:1px dashed #eee;}
   #diag-last-error { color:#b50000; font-weight:600; }
-  #diag-api-status { padding:4px 10px; border-radius:999px; font-size:12px; font-weight:600; background:#f3f4f6; color:#6b7280; } /* Default status style for API */
 </style>
 
 </head>
@@ -651,7 +660,6 @@
         </div>
     </div>
 
-    <!-- Edit Modal -->
     <div class="modal" id="editModal" role="dialog" aria-labelledby="editModalTitle">
         <div class="modal-content">
             <div class="modal-header">
@@ -676,7 +684,6 @@
         </div>
     </div>
 
-    <!-- Batch Summary Modal -->
     <div class="modal" id="batchSummaryModal" role="dialog" aria-labelledby="batchSummaryTitle">
         <div class="modal-content">
             <div class="modal-header">
@@ -694,7 +701,6 @@
         </div>
     </div>
     
-    <!-- Confirmation Modal -->
     <div class="modal" id="confirmModal" role="dialog" aria-labelledby="confirmTitle">
         <div class="modal-content">
             <div class="modal-header">
@@ -728,12 +734,6 @@
             loadEntries();
             initSpeechRecognition();
             setupEventListeners();
-            // Initial check if API Key is present on load
-            const apiKey = document.getElementById('apiKey').value.trim();
-            const provider = document.getElementById('apiProvider').value;
-            if (apiKey) {
-                checkAPIKey(apiKey, provider);
-            }
         });
 
         function getEntries() {
@@ -749,24 +749,8 @@
         }
 
         function setupEventListeners() {
-            document.getElementById('apiKey').addEventListener('input', () => {
-                saveAPIKey();
-                const apiKey = document.getElementById('apiKey').value.trim();
-                const provider = document.getElementById('apiProvider').value;
-                if (apiKey.length > 5) { // Check only if key is somewhat long
-                    checkAPIKey(apiKey, provider);
-                } else {
-                    updateAPIDiagStatus('Bitte API-Schlüssel eingeben', 'state-warn');
-                }
-            });
-            document.getElementById('apiProvider').addEventListener('change', () => {
-                saveAPIKey();
-                const apiKey = document.getElementById('apiKey').value.trim();
-                const provider = document.getElementById('apiProvider').value;
-                if (apiKey) {
-                    checkAPIKey(apiKey, provider);
-                }
-            });
+            document.getElementById('apiKey').addEventListener('change', saveAPIKey);
+            document.getElementById('apiProvider').addEventListener('change', saveAPIKey);
             document.getElementById('recordBtn').addEventListener('click', toggleRecording);
             document.getElementById('summarizeBtn').addEventListener('click', summarize);
             document.getElementById('cancelBtn').addEventListener('click', cancelTranscript);
@@ -819,132 +803,6 @@
             document.getElementById('confirmNoBtn').addEventListener('click', closeConfirmModal);
             document.getElementById('closeConfirmModal').addEventListener('click', closeConfirmModal);
         }
-        
-        // **********************************************
-        // NEU: API Key Prüfung Logik
-        // **********************************************
-        
-        function updateAPIDiagStatus(text, cls) {
-            const el = document.getElementById('diag-api-status');
-            if (!el) return;
-            el.textContent = text;
-            el.className = `state-badge ${cls}`;
-            diagLog(`API-Status: ${text}`);
-        }
-        
-        async function checkAPIKey(apiKey, provider) {
-            if (!apiKey) {
-                updateAPIDiagStatus('Kein Schlüssel', 'state-warn');
-                return;
-            }
-            
-            updateAPIDiagStatus('Prüfe...', 'state-warn');
-            
-            // Minimaler Test-Prompt, um nur die API-Verbindung zu prüfen
-            const testPrompt = "Ping";
-            
-            try {
-                // Verwenden Sie eine vereinfachte Version von callLLMAPI, die nur das Ergebnis liefert
-                const url = getTestAPIUrl(apiKey, provider);
-                const headers = getTestAPIHeaders(apiKey, provider);
-                const body = getTestAPIBody(testPrompt, provider);
-
-                const response = await fetchWithRetry(url, { method: 'POST', headers, body });
-
-                if (!response.ok) {
-                    throw new Error(`HTTP ${response.status}`);
-                }
-                
-                // Erfolg: Mindestens eine gültige Antwort kam zurück (200 OK)
-                updateAPIDiagStatus('Schlüssel gültig', 'state-ok');
-            } catch (error) {
-                // Fehler: Ungültiger Schlüssel, Ratenlimit, etc.
-                let errorMessage = 'Fehler beim Prüfen';
-                if (error.message.includes('401')) {
-                    errorMessage = 'Ungültiger Schlüssel (401)';
-                } else if (error.message.includes('403')) {
-                    errorMessage = 'Zugriff verweigert (403)';
-                } else if (error.message.includes('429')) {
-                    errorMessage = 'Ratenlimit (429)';
-                } else if (error.message.includes('50')) {
-                    errorMessage = 'Serverfehler';
-                } else {
-                    errorMessage += `: ${error.message}`;
-                }
-                updateAPIDiagStatus(errorMessage, 'state-err');
-            }
-        }
-        
-        function getTestAPIUrl(apiKey, provider) {
-            if (provider === 'anthropic') return 'https://api.anthropic.com/v1/messages';
-            if (provider === 'openai') return 'https://api.openai.com/v1/chat/completions';
-            if (provider === 'gemini') return `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-            throw new Error("Unbekannter KI-Anbieter.");
-        }
-
-        function getTestAPIHeaders(apiKey, provider) {
-            const headers = { 'Content-Type': 'application/json' };
-            if (provider === 'anthropic') {
-                headers['x-api-key'] = apiKey;
-                headers['anthropic-version'] = '2023-06-01';
-                headers['anthropic-dangerous-direct-browser-access'] = 'true';
-            } else if (provider === 'openai') {
-                headers['Authorization'] = `Bearer ${apiKey}`;
-            }
-            return headers;
-        }
-
-        function getTestAPIBody(prompt, provider) {
-            if (provider === 'anthropic') {
-                return JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
-                    max_tokens: 10, // Max tokens auf Minimum setzen
-                    messages: [{ role: 'user', content: prompt }]
-                });
-            } else if (provider === 'openai') {
-                return JSON.stringify({
-                    model: 'gpt-4o-mini',
-                    messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 10 // Max tokens auf Minimum setzen
-                });
-            } else if (provider === 'gemini') {
-                return JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }],
-                    config: { maxOutputTokens: 10 } // Max tokens auf Minimum setzen
-                });
-            }
-            return null;
-        }
-
-        // Hilfsfunktion für Fetch mit Exponential Backoff (für Stabilität)
-        async function fetchWithRetry(url, options, maxRetries = 3) {
-            for (let i = 0; i < maxRetries; i++) {
-                try {
-                    const response = await fetch(url, options);
-                    if (response.status !== 429 && response.status < 500) {
-                        return response; // Success or non-retryable client error
-                    }
-                    if (i === maxRetries - 1) {
-                        return response; // Last try, return response even if 429/5xx
-                    }
-                    // Wait for 2^i seconds
-                    const delay = Math.pow(2, i) * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                } catch (error) {
-                    if (i === maxRetries - 1) {
-                        throw error; // Last try, throw network error
-                    }
-                    // Wait for 2^i seconds
-                    const delay = Math.pow(2, i) * 1000;
-                    await new Promise(resolve => setTimeout(resolve, delay));
-                }
-            }
-        }
-        
-        // **********************************************
-        // ENDE: API Key Prüfung Logik
-        // **********************************************
-
 
         function initSpeechRecognition() {
             const SR = window.SpeechRecognition || window.webkitSpeechRecognition;
@@ -961,19 +819,21 @@
 
             recognition.onresult = (event) => {
                 let interim = '';
+                let final = '';
                 for (let i = event.resultIndex; i < event.results.length; i++) {
                     if (event.results[i].isFinal) {
-                        currentTranscript += event.results[i][0].transcript + ' ';
+                        final += event.results[i][0].transcript + ' ';
                     } else {
                         interim += event.results[i][0].transcript;
                     }
                 }
-                document.getElementById('transcript').value = currentTranscript + interim;
+                currentTranscript += final;
+                document.getElementById('transcript').value = currentTranscript.trim() + ' ' + interim.trim();
+                document.getElementById('transcriptSection').classList.add('show');
             };
 
             recognition.onerror = (event) => {
                 console.error('Speech recognition error:', event.error);
-                diagError(event.error); // Log to diagnostic
                 showError('Fehler bei der Spracherkennung: ' + event.error);
                 stopRecording();
             };
@@ -990,17 +850,10 @@
         function startRecording() {
             currentTranscript = '';
             document.getElementById('transcript').value = '';
-            document.getElementById('transcriptSection').style.display = 'none';
-            document.getElementById('summarySection').style.display = 'none';
+            document.getElementById('transcriptSection').classList.add('show');
+            document.getElementById('summarySection').classList.remove('show');
             
-            try {
-                recognition.start();
-            } catch (e) {
-                diagError('Recognition Start Error: ' + e.message);
-                showError('Aufnahme konnte nicht gestartet werden. Prüfen Sie die Mikrofon-Berechtigung.');
-                return;
-            }
-
+            recognition.start();
             isRecording = true;
             document.getElementById('recordBtn').classList.add('recording');
             document.getElementById('recordBtn').textContent = '⏹️';
@@ -1020,12 +873,11 @@
             document.getElementById('recordBtn').setAttribute('aria-label', 'Aufnahme starten');
             document.getElementById('status').textContent = 'Aufnahme beendet';
             
-            // NEU: Zeige Transkription, sobald Aufnahme stoppt und Text da ist
             if (currentTranscript.trim()) {
-                document.getElementById('transcriptSection').style.display = 'block';
                 document.getElementById('transcript').value = currentTranscript.trim();
+                document.getElementById('transcriptSection').classList.add('show');
             } else {
-                document.getElementById('transcriptSection').style.display = 'none';
+                document.getElementById('transcriptSection').classList.remove('show');
             }
         }
 
@@ -1076,7 +928,7 @@
             try {
                 let summary = await callLLMAPI(transcript, apiKey, provider);
                 document.getElementById('summary').value = summary;
-                document.getElementById('summarySection').style.display = 'block';
+                document.getElementById('summarySection').classList.add('show');
                 document.getElementById('loading').classList.remove('show');
                 currentTags = [];
                 updateCurrentTags();
@@ -1084,51 +936,6 @@
                 showError('Fehler beim Erstellen der Zusammenfassung: ' + error.message);
                 document.getElementById('loading').classList.remove('show');
             }
-        }
-
-        async function callLLMAPI(text, apiKey, provider) {
-            let url, headers = { 'Content-Type': 'application/json' }, body;
-            const prompt = `Bitte erstelle eine prägnante und gut strukturierte Zusammenfassung des folgenden Textes. Die Zusammenfassung sollte die wichtigsten Punkte erfassen und klar formuliert sein:\n\n${text}`;
-
-            if (provider === 'anthropic') {
-                url = 'https://api.anthropic.com/v1/messages';
-                headers['x-api-key'] = apiKey;
-                headers['anthropic-version'] = '2023-06-01';
-                headers['anthropic-dangerous-direct-browser-access'] = 'true';
-                body = JSON.stringify({
-                    model: 'claude-3-5-sonnet-20241022',
-                    max_tokens: 1024,
-                    messages: [{ role: 'user', content: prompt }]
-                });
-            } else if (provider === 'openai') {
-                url = 'https://api.openai.com/v1/chat/completions';
-                headers['Authorization'] = `Bearer ${apiKey}`;
-                body = JSON.stringify({
-                    model: 'gpt-4o-mini',
-                    messages: [{ role: 'user', content: prompt }],
-                    max_tokens: 500
-                });
-            } else if (provider === 'gemini') {
-                url = `https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent?key=${apiKey}`;
-                body = JSON.stringify({
-                    contents: [{ parts: [{ text: prompt }] }]
-                });
-            } else {
-                throw new Error("Unbekannter KI-Anbieter.");
-            }
-
-            const response = await fetchWithRetry(url, { method: 'POST', headers, body });
-
-            if (!response.ok) {
-                const errorData = await response.json().catch(() => ({}));
-                throw new Error(`API-Fehler: ${response.status} - ${errorData.error?.message || response.statusText}`);
-            }
-
-            const data = await response.json();
-            
-            if (provider === 'anthropic') return data.content[0].text;
-            if (provider === 'openai') return data.choices[0].message.content;
-            if (provider === 'gemini') return data.candidates[0].content.parts[0].text;
         }
 
         async function reformulate(style) {
@@ -1736,8 +1543,8 @@
             document.getElementById('transcript').value = '';
             document.getElementById('summary').value = '';
             document.getElementById('newTag').value = '';
-            document.getElementById('transcriptSection').style.display = 'none';
-            document.getElementById('summarySection').style.display = 'none';
+            document.getElementById('transcriptSection').classList.remove('show');
+            document.getElementById('summarySection').classList.remove('show');
             document.getElementById('status').textContent = 'Bereit zur Aufnahme';
             updateCurrentTags();
             document.getElementById('error').classList.remove('show');
@@ -1759,9 +1566,6 @@
     <div>Zustand</div>
     <div><span id="diag-state" class="state-badge state-warn">bereit</span></div>
 
-    <div>API-Schlüssel</div>
-    <div><span id="diag-api-status" class="state-badge state-warn">Bitte API-Schlüssel eingeben</span></div> <!-- NEU: API Statusanzeige -->
-
     <div>Mikrofon-Pegel</div>
     <div class="level-wrap"><div id="diag-level" class="level-bar anim"></div></div>
 
@@ -1770,6 +1574,7 @@
 
     <div>Ereignis-Log</div>
     <div id="diag-log" aria-live="polite"></div>
+<div style="grid-column:1 / span 2; display:flex; gap:8px; margin-top:8px;"><button id="diagStart" type="button">Diagnose starten</button><button id="diagStop" type="button">Diagnose stoppen</button></div>
   </div>
 </section>
 
@@ -1901,6 +1706,95 @@
 
     window.__memotag.diag = { diagSetState, diagLog, diagError, startMicMeter, stopMicMeter };
   })();
+</script>
+
+
+<script id="override-start-stop">
+// --- Override start/stop to wire diagnostics and robust restart ---
+function startRecording() {
+  // Reset transcript UI
+  currentTranscript = '';
+  const t = document.getElementById('transcript');
+  if (t) t.value = '';
+  const ts = document.getElementById('transcriptSection');
+  const ss = document.getElementById('summarySection');
+  if (ts) ts.classList.add('show');
+  if (ss) ss.classList.remove('show');
+
+  // Diagnostics
+  try {
+    if (window.__memotag && window.__memotag.diag) {
+      __memotag.diag.diagSetState('startet…', 'state-warn');
+      __memotag.diag.startMicMeter();
+      __memotag.diag.diagLog('Start-Button');
+    }
+  } catch(_) {}
+
+  // Robust: abort any previous and re-init fresh
+  try { if (recognition && recognition.abort) recognition.abort(); } catch(e){}
+  try { initSpeechRecognition(); } catch(e){}
+
+  setTimeout(() => {
+    try { recognition.start(); } catch (e) {
+      try { diagError && diagError('Recognition Start Error: ' + e.message); } catch(_) {}
+      showError('Aufnahme konnte nicht gestartet werden. Prüfe die Mikrofon-Berechtigung.');
+      return;
+    }
+    isRecording = true;
+    const btn = document.getElementById('recordBtn');
+    if (btn) {
+      btn.classList.add('recording');
+      btn.textContent = '⏹️';
+      btn.setAttribute('aria-label', 'Aufnahme stoppen');
+    }
+    const status = document.getElementById('status');
+    if (status) status.textContent = 'Aufnahme läuft...';
+
+    if (document.getElementById('locationPermission')?.checked) {
+      getCurrentLocation && getCurrentLocation();
+    }
+
+    // Safety timeout
+    clearTimeout(window.__recTimeout);
+    window.__recTimeout = setTimeout(() => { try { stopRecording(); } catch(e){} }, 90 * 1000);
+  }, 60);
+}
+
+function stopRecording() {
+  clearTimeout(window.__recTimeout);
+  try { recognition && recognition.stop && recognition.stop(); } catch(e){}
+  try { recognition && recognition.abort && recognition.abort(); } catch(e){}
+  isRecording = false;
+
+  // Diagnostics
+  try {
+    if (window.__memotag && window.__memotag.diag) {
+      __memotag.diag.diagLog('Stop-Button');
+      __memotag.diag.stopMicMeter();
+      __memotag.diag.diagSetState('beendet', 'state-warn');
+    }
+  } catch(_) {}
+
+  const btn = document.getElementById('recordBtn');
+  if (btn) {
+    btn.classList.remove('recording');
+    btn.textContent = '🎤';
+    btn.setAttribute('aria-label', 'Aufnahme starten');
+  }
+  const status = document.getElementById('status');
+  if (status) status.textContent = 'Aufnahme beendet';
+
+  const txt = (currentTranscript || '').trim();
+  if (txt) {
+    const ts = document.getElementById('transcriptSection');
+    if (ts) ts.classList.add('show');
+    const t = document.getElementById('transcript');
+    if (t) t.value = txt;
+  } else {
+    const ts = document.getElementById('transcriptSection');
+    if (ts) ts.classList.remove('show');
+  }
+}
 </script>
 
 </body>
